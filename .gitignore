@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.forge/
+.env*
+tools/seed/out/
+playwright-report/
+test-results/
