@@ -30,7 +30,20 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.5)
 
-  packages/engine: {}
+  packages/engine:
+    dependencies:
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+
+  packages/seedgen:
+    dependencies:
+      '@tt/engine':
+        specifier: workspace:*
+        version: link:../engine
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
 
 packages:
 
@@ -725,6 +738,9 @@ packages:
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
 
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
@@ -1637,6 +1653,8 @@ snapshots:
       is-extglob: 2.1.1
 
   isexe@2.0.0: {}
+
+  jpeg-js@0.4.4: {}
 
   js-tokens@9.0.1: {}
 

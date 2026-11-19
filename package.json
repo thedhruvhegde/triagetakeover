@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.28.0",
   "engines": { "node": ">=22.12" },
   "scripts": {
-    "typecheck": "tsc -b packages/engine",
+    "typecheck": "tsc -b packages/engine packages/seedgen",
     "lint": "eslint .",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
