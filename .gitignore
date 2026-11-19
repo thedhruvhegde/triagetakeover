@@ -1,7 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
-coverage/
+/coverage/
 .forge/
 .env*
 tools/seed/out/
