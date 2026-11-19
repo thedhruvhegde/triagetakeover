@@ -24,9 +24,10 @@ Manifest snippets are **illustrative**. The exact syntax gets checked with `forg
 | D6 | **Onset test = exact conditional binomial test, scanned over build boundaries, with Bonferroni across boundaries and Holm across clusters.** | Picking the onset build after looking at the data inflates significance. The scan plus correction keeps the reported p-value honest. |
 | D7 | **One shared action layer** behind `rovo:agent`, `rovo:skill` and `rovo:mcp`. The UI resolvers call the same domain services. | Honest qualification for the Agents and MCP bonuses ([rovo-mcp-twg §4.2](research/rovo-mcp-twg.md)). |
 | D8 | **TWG is used for team routing only in the MVP**, always as the user, always with a fallback, and returns derived data only through MCP. | TWG can only be called as the user, and missing scopes fail silently. Community reports describe failures inside Rovo actions ([rovo-mcp-twg KF5–6](research/rovo-mcp-twg.md)). |
-| D9 | **No Forge SQL, no Object Store, no Containers, no Remote, no dynamic web triggers, no `external.fetch.*`.** | Avoids major-version decisions, Preview storage, cost, and losing Runs on Atlassian ([forge-platform KF7](research/forge-platform.md)). |
+| D9 | **No Forge SQL, no Object Store, no Containers, no Remote, no dynamic web triggers, no `external.fetch.*`, no Forge LLM (`llm` module, cut 2026-11-19).** | Avoids major-version decisions, Preview storage, cost, and losing Runs on Atlassian ([forge-platform KF7](research/forge-platform.md)). |
 | D10 | **The demo seed runs server-side in a queue consumer** and reuses the engine and the seed generator. The browser only creates the project (as the admin user) and polls progress. | The seed keeps running if the tab is closed, can be retried per step via `retryContext`, and can run up to 900 s ([forge-platform §C](research/forge-platform.md)). Fallback: seed from the browser (SPIKE-S3). |
 | D11 | **UI Kit for the admin page and "Triage now".** **Custom UI for the intake, the issue panel and the board**, which need the File API, a Web Worker, jpeg-js and SVG plots. | "UI Kit where possible" (PRD principle 9). |
+| D12 | **No background triggers (2026-11-19).** No product-event `trigger` and no `scheduledTrigger`. The index is kept fresh by synchronous writes, by **lazy re-processing when the issue panel opens**, and by a **"Re-sync now"** button (admin page and project page) that enqueues the existing `tt-recluster` consumer with `reason: "resync"` (§7.5, §8). | Fewer modules and functions for a solo developer, no up-to-3-minute event lag to explain, and no open question about whether property writes fire events (SPIKE-V1, now N/A). |
 
 ---
 
@@ -45,11 +46,8 @@ flowchart LR
     RES["ui-resolver<br/>25 s"]
     ACT["action handlers<br/>55 s"]
     SVC["domain services<br/>uses packages/engine"]
-    TRG["trigger: issue created/updated"]
-    QREC["consumer: tt-recluster"]
+    QREC["consumer: tt-recluster<br/>(recluster + Re-sync rebuild)"]
     QSEED["consumer: tt-seed"]
-    QLLM["consumer: tt-llm"]
-    SCHED["scheduledTrigger: daily reconcile"]
   end
 
   subgraph Jira["Jira Cloud - source of truth"]
@@ -70,7 +68,6 @@ flowchart LR
   end
 
   TWG["Teamwork Graph API<br/>Preview, asUser"]
-  LLM["Forge LLM - optional"]
 
   INTAKE -- "requestJira asUser: create issue, upload attachments" --> ISS
   INTAKE -- "invoke: derived JSON only, <=50 KB" --> RES
@@ -86,15 +83,11 @@ flowchart LR
   SVC --> CE
   SVC --> KVS
   SVC -- "asUser only, fallback on error" --> TWG
-  TRG --> QREC
-  RES -- "push" --> QREC
+  RES -- "push (intake, actions, panel lazy re-process, Re-sync now)" --> QREC
   RES -- "push" --> QSEED
-  RES -- "push" --> QLLM
   QREC --> SVC
   QSEED -- "asApp: issues, props, attachments, links" --> ISS
   QSEED --> CE
-  QLLM --> LLM
-  SCHED --> SVC
 ```
 
 **There is no arrow from any Forge function to `api.media.atlassian.com`.** The server never reads attachment bytes.
@@ -138,26 +131,24 @@ sequenceDiagram
 
 | Module key (VERIFIED type) | App key | UI | Purpose | PRD |
 |---|---|---|---|---|
-| `jira:adminPage` | `tt-admin` | **UI Kit** | Load or remove demo data, project and issue-type config, thresholds, team mapping, LLM toggle, diagnostics | US-01–03, 15, 21 |
-| `jira:projectPage` | `tt-board` | Custom UI (`board`) | Cluster board, novel queue, "Mark triaged", onset, 2D coverage gap view, "File takeover" button that opens the intake modal | US-12, 14, 17 |
-| `jira:issuePanel` | `tt-panel` | Custom UI (`panel`) | Signal plot, chips, top-3 side by side, why-table, Accept / Split / Route / Undo, "Triage now" button | US-09–11, 13 |
+| `jira:adminPage` | `tt-admin` | **UI Kit** | Load or remove demo data, project and issue-type config, thresholds, team mapping, diagnostics, "Re-sync now" (D12) | US-01–03, 15 |
+| `jira:projectPage` | `tt-board` | Custom UI (`board`) | Cluster board, novel queue, "Mark triaged", onset, 2D coverage gap view, "File takeover" button that opens the intake modal, "Re-sync now" (D12) | US-02, 12, 14, 17 |
+| `jira:issuePanel` | `tt-panel` | Custom UI (`panel`) | Signal plot, chips, top-3 side by side, why-table, Accept / Split / Route / Undo, "Triage now" button. Lazy re-processing on open (§7.5) | US-02, 09–11, 13 |
 | `jira:issueAction` | `tt-triage-now` | **UI Kit** | Runs matching on demand and shows a compact result, avoiding the event lag | US-09 |
 | `jira:issueAction` | `tt-add-telemetry` | Custom UI (`intake`, mode `attach`) | Adds CSV and JPEGs to an existing issue | US-06 |
 | Bridge `Modal` from `tt-board` | – | Custom UI (`intake`, mode `create`) | "File takeover" from the board. SPIKE-C2: `Modal` from `@forge/bridge` opening another resource | US-04 |
-| `jira:entityProperty` | `tt-event-index` | – | Indexes `tt.event` fields for JQL (`ttType`, `ttVariant`, `ttBuild`, `ttV`, `ttOccurred`). Used by reconciliation and by users. SPIKE-E1 | US-02, reconcile |
-| `trigger` | `tt-issue-events` | – | `avi:jira:created:issue`, `avi:jira:updated:issue`. Safety net that indexes properties written by other tools. Delivery takes up to 3 min (VERIFIED) | – |
-| `consumer` | `tt-recluster-consumer` | – | Queue `tt-recluster`: bucket re-proposal (HAC), cluster profile and onset caches | US-09, 14 |
+| `jira:entityProperty` | `tt-event-index` | – | Indexes `tt.event` fields for JQL (`ttType`, `ttVariant`, `ttBuild`, `ttV`, `ttOccurred`). Used by Re-sync (reconcile) and by users. SPIKE-E1 | US-02, re-sync |
+| `consumer` | `tt-recluster-consumer` | – | Queue `tt-recluster`: bucket re-proposal (HAC), cluster profile and onset caches; with `reason: "resync"`, the full §7.5 index rebuild first (D12) | US-02, 09, 14 |
 | `consumer` | `tt-seed-consumer` | – | Queue `tt-seed`: demo data steps | US-01 |
-| `consumer` | `tt-llm-consumer` | – | Queue `tt-llm`: optional cluster naming and stub narratives | US-21 |
-| `scheduledTrigger` | `tt-daily-reconcile` | – | `interval: day`. Rebuilds the index from JQL and links, and cleans up stale jobs. 1 of the 5 allowed (VERIFIED) | D3 |
-| `llm` | `tt-llm` | – | `model: [claude]` (VERIFIED module shape, [forge-platform KF5](research/forge-platform.md)). The model id comes from config | US-21 |
 | `action` x 9 | see §10 | – | Shared tool layer | US-19–20 |
 | `rovo:agent` | `fleet-triage` | – | Name "Fleet Triage" (≤ 30 chars) | US-19 |
 | `rovo:skill` | `monday-takeover-triage` | – | SKILL.md playbook (Preview) | US-20 |
 | `rovo:mcp` | `takeover-triage-mcp` | – | Exposes the 9 action keys (at most 1 per app, at most 50 tools; VERIFIED) | US-20 |
-| `function` | ~14 | – | Handlers (below) | – |
+| `function` | 12 | – | Handlers (below) | – |
 
 **Not used:** `jira:globalPage` (the board is per project; a cross-project page is post-hackathon), `webtrigger`, `rovo:agentConnector`, `graph:connector`, `sql`, `object-store`, workflow validators, JSM modules.
+
+**Removed 2026-11-19 (D9, D12):** `trigger` `tt-issue-events`, `scheduledTrigger` `tt-daily-reconcile`, `consumer` `tt-llm-consumer` and the `llm` module `tt-llm`, with their functions `on-issue-event`, `reconcile` (its logic moves into the `tt-recluster` consumer as the `resync` mode) and `llm-job`.
 
 **Resources (limit 10, VERIFIED):** `board`, `panel`, `intake`, `admin` (UI Kit), `triage` (UI Kit), `agent` (prompt text), `icons`. That is 7.
 
@@ -214,22 +205,11 @@ modules:
         - { path: ctx.build,   type: string, searchAlias: ttBuild }
         - { path: ctx.occurredAt, type: date, searchAlias: ttOccurred }   # demo S01 filter; all seeded issues share one `created` time
 
-  trigger:
-    - key: tt-issue-events
-      function: on-issue-event
-      events: [avi:jira:created:issue, avi:jira:updated:issue]
-      filter: { ignoreSelf: true }       # VERIFIED filter exists; semantics for app writes: SPIKE-V1
+  # No `trigger`, `scheduledTrigger` or `llm` modules (D9, D12; cut 2026-11-19)
 
   consumer:                               # SPIKE-M1: `function:` vs `resolver: {function, method}` form
-    - { key: tt-recluster-consumer, queue: tt-recluster, function: recluster }
+    - { key: tt-recluster-consumer, queue: tt-recluster, function: recluster }   # also runs Re-sync (reason: resync)
     - { key: tt-seed-consumer,      queue: tt-seed,      function: seed-step }
-    - { key: tt-llm-consumer,       queue: tt-llm,       function: llm-job }
-
-  scheduledTrigger:
-    - { key: tt-daily-reconcile, function: reconcile, interval: day }
-
-  llm:
-    - { key: tt-llm, model: [claude] }
 
   action:                                 # full inputs in section 10
     - { key: get-cluster-for-event,  name: Get cluster for event,   function: act-get-cluster,  actionVerb: GET,    description: "...", inputs: { ... } }
@@ -272,11 +252,8 @@ modules:
 
   function:
     - { key: ui-resolver,     handler: index.uiResolver }
-    - { key: on-issue-event,  handler: index.onIssueEvent }
-    - { key: recluster,       handler: index.recluster,  timeoutSeconds: 300 }
+    - { key: recluster,       handler: index.recluster,  timeoutSeconds: 900 }   # 900 s for the resync rebuild
     - { key: seed-step,       handler: index.seedStep,   timeoutSeconds: 600 }
-    - { key: llm-job,         handler: index.llmJob,     timeoutSeconds: 300 }
-    - { key: reconcile,       handler: index.reconcile,  timeoutSeconds: 900 }
     - { key: act-get-cluster, handler: actions.getClusterForEvent }
     # ... one per action (8 more)
 
@@ -312,10 +289,10 @@ Scope strings for Jira and storage are standard Forge scopes. TWG scope strings 
 | `manage:jira-project` | **Seed only:** create the demo project and its components | Conditional on SPIKE-S1. If project creation also needs `manage:jira-configuration`, **drop project creation** and seed into an admin-selected existing project. Never ask for `manage:jira-configuration` just for a link type: use the existing "Duplicate" or "Relates" | MVP (conditional) |
 | `storage:app` | KVS and custom entities | Required for `@forge/kvs` | MVP |
 | `read:graph:team:atlassian` (VERIFIED string, TWG "Call the API" page, Feb 11 2026, checked 2026-11-19) | TWG `atlassianTeamMembers`, team display names | Read-only Preview. Missing scope means silent empty results, so the diagnostics panel tests it. The **organization admin** must grant it | MVP |
-| `read:graph:user:atlassian` (VERIFIED string, same page) | TWG `atlassianUserInTeams` ("my teams"), member nodes | Read-only Preview. Installing TWG-scoped apps needs an org admin ([BRIEF §5](research/BRIEF.md)) | MVP |
+| `read:graph:user:atlassian` (VERIFIED string, same page) | TWG `atlassianUserInTeams` (admin team picker; the "my teams" board filter is stretch US-27), member nodes | Read-only Preview. Installing TWG-scoped apps needs an org admin ([BRIEF §5](research/BRIEF.md)) | MVP |
 | `read:graph:issue:jira`, `read:graph:pull-request:external`, … | US-16 related work (stretch) | **Excluded by default.** Add only if US-16 is green by Nov 27 | Stretch, decided by Nov 27 |
 | `read:cmdb-object:jira` *(name SPIKE)* | Assets adapter (US-25) | **Excluded.** Adding it later is a major version, so US-25 is post-hackathon unless decided by Nov 27 | Not planned |
-| LLM | No scope documented, but **adding the `llm` module triggers a major version upgrade** (VERIFIED, llm module page, Jul 23 2026). It must be in the manifest before the Dec 11 production install or not at all | SPIKE-L2 (consent UX only) | MVP-lite, decide by Nov 27 |
+| LLM | **N/A (cut 2026-11-19).** No `llm` module, so no major-version or consent question (SPIKE-L2 N/A) | – | Cut |
 
 **No** `external.fetch.backend`, `external.fetch.client`, `read:jira-work` on behalf of other products, or Confluence scopes. The app installs into Jira only.
 
@@ -353,7 +330,7 @@ takeover-triage/
 │   │   │   └── index.ts
 │   │   └── test/                # unit + fast-check properties + golden fixtures
 │   ├── seedgen/                 # procedural fleet: PRNG (xoshiro128**), vehicles, drive sessions,
-│   │                            # event scenarios, CSV writer, frame renderer (RGBA) + jpeg-js encode,
+│   │                            # event scenarios, CSV writer, simplified frame renderer (RGBA) + jpeg-js encode,
 │   │                            # SYNTHETIC watermark, ground-truth labels for eval. Depends on engine.
 │   └── ui-shared/               # React + Atlaskit components: SignalPlot (SVG), OverlayPlot,
 │                                # WhyTable, ConditionChips, ConfidenceBadge, EvidenceLink, GapGrid
@@ -361,13 +338,13 @@ takeover-triage/
 │   └── forge/
 │       ├── manifest.yml
 │       ├── src/
-│       │   ├── index.ts         # function exports (resolver, consumers, trigger, scheduled)
+│       │   ├── index.ts         # function exports (resolver, consumers)
 │       │   ├── actions.ts       # Rovo/MCP action handlers -> services
 │       │   ├── resolvers/       # @forge/resolver definitions (thin)
 │       │   ├── services/        # match, commitEvent, accept, split, route, onset, coverage,
 │       │   │                    # seed, reconcile, diagnostics (use engine + ports)
-│       │   ├── ports/           # JiraPort, StoragePort, TwgPort, LlmPort, Clock (interfaces)
-│       │   ├── adapters/        # forge-jira (asUser/asApp), forge-kvs, forge-twg, forge-llm,
+│       │   ├── ports/           # JiraPort, StoragePort, TwgPort, Clock (interfaces)
+│       │   ├── adapters/        # forge-jira (asUser/asApp), forge-kvs, forge-twg,
 │       │   │                    # + in-memory fakes for tests
 │       │   ├── validation/      # input validation for resolvers/actions (untrusted)
 │       │   ├── frontend/        # UI Kit: admin.tsx, triage.tsx
@@ -383,7 +360,7 @@ takeover-triage/
 │   │                            # Judges never need it: the in-app seed is the judge path.
 │   ├── eval/                    # SM-4 harness: ARI on unseen seeds; scipy reference generator
 │   │   └── gen_reference.py     # writes stats fixtures (binomtest, beta.ppf) once; committed JSON
-│   └── bot-qa/                  # Playwright: judge-flow bot, stopwatch, screenshots, video
+│   └── bot-qa/                  # Playwright: judge-flow bot, stopwatch, screenshots (no video mode)
 ├── skills/monday-takeover-triage/SKILL.md   # OSS copy for third-party agents (same file, CI checks equality)
 ├── docs/                        # PRD, ARCHITECTURE, RISKS, MILESTONES, SETUP (judge instructions)
 └── .github/workflows/           # ci.yml, deploy-staging.yml, bot-qa.yml, release.yml
@@ -547,7 +524,7 @@ Inputs are the bucket's events. Each is `accepted` (linked to a cluster by a hum
 4. **Profile and medoid:**
    - The cluster *profile* is the per-feature median of accepted members. It is used for "reference value" in the why-table.
    - The *medoid* is the member with the minimum sum of distances (ties go to the lowest key). It is used for plots and as a representative event.
-5. **Deterministic name:** `<Type> · <top chip, if not normal> · <variant>`, for example "Lane-loss · low sun · cam-B". An LLM name, when enabled, is stored separately as `nameAi` and never replaces membership or numbers.
+5. **Deterministic name:** `<Type> · <top chip, if not normal> · <variant>`, for example "Lane-loss · low sun · cam-B". This template is the only naming path (no LLM, cut 2026-11-19); a user may rename via Split's optional `name`.
 
 **Default parameters** are tuned on seeds 1–5 only, then **frozen** (commit-tagged `params-v1`) before SM-4 runs on 20 unseen seeds (seeds 1000–1019).
 
@@ -677,7 +654,7 @@ Estimated size is **≈ 6–7 KB** (telemetry 4.3 KB, rest ≈ 2 KB). The target
 |---|---|---|---|
 | `tt.thumbs` | event issue | `{v, frames:[{w:160,h:90,jpegB64}]}` | ≤ 12 KB (4 x ≤ 3 KB) |
 | `tt.triage` | event issue | `{v, state: accepted\|rejected\|none, clusterKey, by: accountId, at, history: [last 10 actions]}` | ≤ 3 KB |
-| `tt.cluster` | cluster issue | `{v, bucket, nameDet, nameAi?, createdBy, createdAt, params: "params-v1"}` | ≤ 2 KB |
+| `tt.cluster` | cluster issue | `{v, bucket, nameDet, createdBy, createdAt, params: "params-v1"}` | ≤ 2 KB |
 | `tt.scenario` | scenario issue (optional) | `{v, type, variant, cond[], odd[]}` | ≤ 1 KB |
 
 **Integrity:**
@@ -745,7 +722,7 @@ app:
           - { name: by-cluster, partition: [clusterId],          range: occurredAt }
           - { name: by-status,  partition: [projectKey, status], range: occurredAt }
       - name: cluster                 # key = cluster issueId
-        attributes: { issueKey, projectKey, bucket, nameDet, nameAi, memberCount(integer),
+        attributes: { issueKey, projectKey, bucket, nameDet, memberCount(integer),
                       firstBuild, ownerRule, status, profile(any), onset(any), coverage(any),
                       updatedAt(integer), synthetic(boolean) }
         indexes:
@@ -769,7 +746,7 @@ SPIKE-E2 covers composite-partition support, query page size and cursor behaviou
 
 | Key | Value |
 |---|---|
-| `config:<projectKey>` | `{enabled, eventIssueType, eventJql, scenarioJql, thresholds, weights, scales, tau, k, chipThresholds, buildOrder, linkType, routeField, routing[], llm:{enabled, model}, params:"params-v1"}` |
+| `config:<projectKey>` | `{enabled, eventIssueType, eventJql, scenarioJql, thresholds, weights, scales, tau, k, chipThresholds, buildOrder, linkType, routeField, routing[], params:"params-v1"}` |
 | `config:global` | `{projects[], demoProjectKey, diagnostics settings}` |
 | `preset:<projectKey>:<id>` | column mapping preset |
 | `triaged:<projectKey>` | `{at, by}`, the "Mark triaged" timestamp (team-wide, US-12 AC3) |
@@ -778,32 +755,31 @@ SPIKE-E2 covers composite-partition support, query page size and cursor behaviou
 | `board:<projectKey>` | cached board summary (TTL 60 s, invalidated by writes) |
 | `scenarios:<projectKey>` | cached scenario tag set (TTL 10 min) |
 | `diag:last` | last diagnostics run |
-| `llm:<sha256(input)>` | cached LLM output (name or narrative) |
+| `resync:<projectKey>` | `{state, requestedBy, requestedAt, finishedAt, counts}` for the latest "Re-sync now" (dedupes clicks while one is pending) |
 
 ### 7.5 Index consistency (D3)
 
-- **Write path:** the property is written first, then the entity. If the entity write fails, the event is still found by the trigger and by reconciliation.
+- **Write path:** the property is written first, then the entity. If the entity write fails, the event is still found by lazy panel re-processing and by Re-sync.
 - **Accept, Split, Route** write Jira first (link, issue or field), then `tt.triage`, then the index. Undo reverses them in the same order.
-- **Reconcile** (daily, and from admin "Re-sync now"):
+- **Lazy re-processing on panel open** (D12): `getPanel` compares the issue's `tt.event` (`v`, `engine`, a hash of `sig` + `tel`) and `tt.triage` with the `event` entity row. If the row is missing or stale, it re-verifies the property (recompute `sig` from `tel`, D2), upserts the row, re-runs the match synchronously, and pushes `tt-recluster {projectKey, bucket, reason: "panel-lazy"}`. This replaces the cut issue-event trigger for properties written by other tools.
+- **Reconcile** (only from the **"Re-sync now"** button on the admin page or the project page, which enqueues `tt-recluster {projectKey, reason: "resync"}`; there is no scheduled run, D12). A pending re-sync per project is deduped via `resync:<projectKey>`:
   1. Run JQL `ttV = 1 AND project in (<enabled>)` (SPIKE-E1; fallback: `labels = tt-takeover`).
   2. Page through the results, reading `tt.event` and `tt.triage` with the search `properties` parameter (SPIKE-E3).
   3. Rebuild the entities. Derive `accepted` membership from links to `tt-cluster` issues.
-  4. Delete orphan rows.
+  4. Delete orphan rows, and purge expired `job:*` and cache keys.
+  5. Continue with the normal recluster work for every bucket of the project (§8).
 - **Idempotence:** link creation first checks for an existing link of the same type and direction. Entity writes are upserts keyed by issueId.
 
 ---
 
 ## 8. Async processing
 
-| Queue / trigger | Producer | Payload (≤ 100 KB) | Consumer work | Timeout | Concurrency |
+| Queue | Producer | Payload (≤ 100 KB) | Consumer work | Timeout | Concurrency |
 |---|---|---|---|---|---|
-| `tt-recluster` | intake, accept, split, undo, trigger, reconcile | `{projectKey, bucket, reason, requestedAt}` | Re-run assign over unassigned events, HAC proposals, profile and medoid, onset scan per cluster, invalidate `board:` | 300 s | key = `projectKey`, limit 1, which serialises index writes (VERIFIED concurrency key and limit exist) |
+| `tt-recluster` | intake, accept, split, undo, panel lazy re-process, "Re-sync now" (admin and project page) | `{projectKey, bucket?, reason: intake\|accept\|split\|undo\|panel-lazy\|resync\|seed, requestedAt}` | For `resync`: the §7.5 reconcile first (all buckets). Then re-run assign over unassigned events, HAC proposals, profile and medoid, onset scan per cluster, invalidate `board:` | 900 s | key = `projectKey`, limit 1, which serialises index writes (VERIFIED concurrency key and limit exist) |
 | `tt-seed` | admin "Load demo data" | `{jobId, step, cursor, seed}` | One step per event: generate, create issues (bulk), upload attachments, write properties, links, entities. Then it pushes the next step | 600 s | key = `jobId`, limit 1 |
-| `tt-llm` | cluster create or split, stub preview | `{kind: name\|narrative, refId, inputHash}` | `@forge/llm chat()`, validate the output (length, no numbers beyond those in the input), store `nameAi` or a draft | 300 s | key = `projectKey`, limit 2 |
-| `trigger tt-issue-events` | Jira | event payload | If the issue has `tt.event` and the index row is missing or stale, push to `tt-recluster`. Otherwise no-op | default | – |
-| `scheduledTrigger tt-daily-reconcile` | platform | – | §7.5 reconcile, purge expired jobs and caches | 900 s | – |
 
-**Event lag:** product events can take up to 3 minutes (VERIFIED). **No user-visible flow waits on a trigger.** "Triage now", intake and every action compute synchronously in the resolver (well under 25 s) and only *queue* follow-up work. The video uses only synchronous paths.
+**No triggers (D12):** there are no product-event or scheduled triggers, so nothing waits on the up-to-3-minute product-event lag (VERIFIED). "Triage now", intake, panel open and every action compute synchronously in the resolver (well under 25 s) and only *queue* follow-up work. "Re-sync now" shows its progress from `resync:<projectKey>`. The video uses only synchronous paths.
 
 **Retries:** consumers use `retryContext`. Seed steps are idempotent: each step checks `seed:state` before creating anything. Progress is polled by the admin page every 1 s through `getSeedJob`.
 
@@ -834,7 +810,7 @@ SPIKE-E2 covers composite-partition support, query page size and cursor behaviou
 - **Per-cluster archetypes** (for example lane-loss low-sun cam-B on ≥ 4.12.0; late-brake night cam-A at a constant rate; phantom-brake under bridges on cam-A, flat across builds), each with parameter distributions per feature.
 - **Noise:** sensor noise (Gaussian per channel), timing jitter (±150 ms takeover), sample-rate variety (50/100/200 Hz), dropped samples, 1 CSV with `;` and decimal comma, 1 with km/h.
 - **Driver text** comes from a shared phrase pool, so text overlaps across clusters on purpose.
-- **Frames** are a procedural road scene (sky gradient, road trapezoid, lane lines, horizon), with a sun disc and bloom for low-sun, global darkening plus headlight cones for night, and a Gaussian blur with streak noise for rain. Output is 1280x720 RGBA, encoded with jpeg-js at quality 85.
+- **Frames** are a simplified procedural road scene with only what the image metrics need (2026-11-19): sky gradient, road, lane lines, a sun glare blob for low-sun, global darkening for night, blur and streaks for rain, and the SYNTHETIC watermark. No lens flares, cones or overpass detail ([SEED_DATA §9](SEED_DATA.md)). Output is 1280x720 RGBA, encoded with jpeg-js at quality 85.
 - **Events are rates per km**, sampled per drive session (Poisson), so the onset statistic is a real outcome of the generated exposure, not a hard-coded verdict.
 
 ---
@@ -933,7 +909,7 @@ The file has under 500 lines and no scripts (VERIFIED constraints). CI checks th
     "clusterRef": {
       "type": "object", "required": ["key", "name", "bucket", "memberCount"],
       "properties": { "key": { "type": "string" }, "name": { "type": "string" },
-                      "nameAi": { "type": "string" }, "bucket": { "type": "string" },
+                      "bucket": { "type": "string" },
                       "memberCount": { "type": "integer" } }
     },
     "onset": {
@@ -968,9 +944,9 @@ The file has under 500 lines and no scripts (VERIFIED constraints). CI checks th
 | `suggest-owner` | GET | `clusterKey*: string` | `{team?: {name, ref, source: "twg"\|"component"\|"project-role"\|"none"}, contact?: {accountId, source}, rule: {index, text}, twgStatus: "ok"\|"empty"\|"error"\|"skipped"}`. **Members are not returned through actions** (D8) |
 | `link-event` | CREATE | `issueKey*: string`; `clusterKey*: string`; `userConfirmed*: boolean` | `{created: boolean, alreadyLinked: boolean, link: {type, inward, outward}, undo: "Use Undo in the Takeover signature panel"}`. If `userConfirmed` ≠ true: `status: needs-confirmation`, nothing written |
 | `create-cluster` | CREATE | `issueKey*: string` (seed event); `name: string` (≤ 80, optional); `userConfirmed*: boolean` | `{cluster: clusterRef, seededWith, proposedMembers: [key] (not linked), nameSource: "user"\|"deterministic"}` |
-| `create-scenario-stub` | CREATE | `clusterKey*: string`; `useAiNarrative: boolean` (default false); `userConfirmed*: boolean` | `{stub: {key, url, labels[]}, linkedEvents: [key], narrativeSource: "template"\|"ai-draft"}` |
+| `create-scenario-stub` | CREATE | `clusterKey*: string`; `userConfirmed*: boolean` | `{stub: {key, url, labels[]}, linkedEvents: [key], narrativeSource: "template"}` (template only; the `useAiNarrative` input was removed with the LLM, 2026-11-19) |
 
-`userConfirmed` is **not a security control**, because the LLM sets it. It is friction against unrequested writes, layered with the prompt rule. SPIKE-R3 covers what Rovo itself shows for CREATE verbs. All writes run **asUser** where possible (SPIKE-A1), so Jira's audit trail and permissions apply to the human.
+`userConfirmed` is **not a security control**, because the Rovo agent's model sets it. It is friction against unrequested writes, layered with the prompt rule. SPIKE-R3 covers what Rovo itself shows for CREATE verbs. All writes run **asUser** where possible (SPIKE-A1), so Jira's audit trail and permissions apply to the human.
 
 **Validation:**
 - Issue keys must match `^[A-Z][A-Z0-9_]{1,9}-\d{1,9}$`.
@@ -997,13 +973,13 @@ The file has under 500 lines and no scripts (VERIFIED constraints). CI checks th
 
 ## 11. Teamwork Graph usage
 
-**Where TWG is genuinely useful:** resolving "owning team" to an Atlassian Team and its people, and showing "clusters routed to my teams". Jira alone has no team-membership graph.
+**Where TWG is genuinely useful:** resolving "owning team" to an Atlassian Team and its people (MVP), and later showing "clusters routed to my teams" (stretch US-27, deferred 2026-11-19). Jira alone has no team-membership graph.
 
 | Use | Query (curated; exact argument shapes SPIKE-T1) | Called from | Scope (SPIKE-T1) | Fallback |
 |---|---|---|---|---|
 | Team picker (admin) | `atlassianUserInTeams(userId: <admin ARI>)`, plus paste a team URL/ARI | UI resolver (asUser) | `read:graph:user:atlassian`, `read:graph:team:atlassian` | Component or project-role picker only |
 | Route suggestion: team name and members | `atlassianTeamMembers(teamId, first: 25)`, one page only | UI resolver (asUser). In actions: name only | `read:graph:team:atlassian`, `read:graph:user:atlassian` | Component lead (`/rest/api/3/component/{id}`), then project role actors, then "none" |
-| "My teams" board filter | `atlassianUserInTeams(userId: <current user ARI>)` | UI resolver (asUser) | same | Filter hidden |
+| "My teams" board filter (**stretch US-27**, deferred 2026-11-19) | `atlassianUserInTeams(userId: <current user ARI>)` | UI resolver (asUser) | same | Filter hidden |
 | Related work for the onset build (stretch US-16) | `jiraWorkItemLinkedExternalPullRequests` / `…Deployments` on the cluster's events | UI resolver only | `read:graph:issue:jira` + external types | Section hidden |
 
 **Call wrapper (`TwgPort`):**
@@ -1018,20 +994,18 @@ The file has under 500 lines and no scripts (VERIFIED constraints). CI checks th
 
 **Diagnostics:** each hop is tested separately: user → teams, then team → members. Each reports pass, empty or error with a plain-language consequence. A dev-flagged **"Simulate TWG error"** toggle (staging only, hidden in production, like "Reset app storage" in §16.3) forces `twgStatus: error` so the fallback path can be demonstrated and tested (DEMO_SCRIPT S17). Any video shot that uses it is captioned as simulated.
 
-**No TWG** in consumers, the scheduled trigger or the seed (no user context, VERIFIED that the app cannot call it as the app). **No `graph:connector`**, because of the possible "API or connector, not both" rule (VERIFIED as stated, page dated Nov 2025).
+**No TWG** in consumers or the seed (no user context, VERIFIED that the app cannot call it as the app). **No `graph:connector`**, because of the possible "API or connector, not both" rule (VERIFIED as stated, page dated Nov 2025).
 
 ---
 
-## 12. Optional LLM
+## 12. LLM (cut 2026-11-19)
 
-- `@forge/llm chat()` is used only in the `tt-llm` consumer and in an explicit "Draft narrative" preview (the resolver enqueues the job, and the UI polls). The model id comes from `config.llm.model` (default `claude-sonnet-4-6` or `claude-sonnet-5`, whichever `list()` reports, per [BRIEF §4 LLM](research/BRIEF.md)).
-- **Inputs:** the deterministic signature summary, chips, variant, the build range and up to 10 driver notes, each truncated to 200 chars. Never images, never accountIds.
-- **Output validation:**
-  - Name: ≤ 60 chars, no digits except those in the input.
-  - Narrative: ≤ 1,500 chars, must not contain numbers that are absent from the input (regex check).
-  - Anything that fails validation falls back to the template.
-- Output is labelled "AI-drafted" and is editable.
-- **Off by default on judges' sites** (SPIKE-L1, billing). The admin toggle and diagnostics show the state. With LLM off, the app has full functional parity (SM-9).
+The Forge LLM is **dropped entirely** (D9): no `llm` module, no `@forge/llm` dependency, no `tt-llm` queue, no `LlmPort`, no admin toggle and no `nameAi` field. Everything it was going to do is deterministic template output (PRD US-21):
+- **Cluster names:** the §5.8 template `<Type> · <top chip> · <variant>`.
+- **Symptom text:** a template over the deterministic signature (type, chips, variant, top features), shown beside the verbatim driver notes. Driver text is never rewritten.
+- **Scenario-stub description:** the §5.10 template with the evidence table.
+
+SPIKE-L1 and SPIKE-L2 are N/A. SM-9 now checks that the manifest has no `llm` module and the code imports no `@forge/llm`.
 
 ---
 
@@ -1054,10 +1028,11 @@ The file has under 500 lines and no scripts (VERIFIED constraints). CI checks th
 | Intake: CSV 5 MB parse + resample + features | ≤ 1 s | 5 MB file | single pass tokenizer |
 | `commitEvent` resolver | ≤ 2 s | 25 s | 2 property PUTs + 1 entity upsert + bucket query + kNN |
 | Invoke payload intake → resolver | ≈ 20 KB | 500 KB | thumbs + telemetry + metrics. Files never pass through invoke |
-| Issue panel load (`getPanel`) | ≤ 1.5 s | 25 s | 2 property reads + kNN + 3 neighbour property reads (telemetry for the overlay) |
+| Issue panel load (`getPanel`) | ≤ 1.5 s (≤ 2.5 s when it lazily re-processes a stale event) | 25 s | 2 property reads + kNN + 3 neighbour property reads (telemetry for the overlay); if the index row is missing or stale, + recompute + 1 entity upsert + 1 queue push (§7.5) |
 | Board load (`getBoard`) | ≤ 2 s (cached ≤ 300 ms) | 25 s | cluster entity query + `board:` cache; onset precomputed by `tt-recluster` |
 | Action p95 | ≤ 5 s | 55 s | same services; TWG timeout 4 s |
-| `tt-recluster` for a 500-event bucket | ≤ 20 s | 300 s | HAC O(n² log n), 125k distances < 1 s; entity writes batched |
+| `tt-recluster` for a 500-event bucket | ≤ 20 s | 900 s | HAC O(n² log n), 125k distances < 1 s; entity writes batched |
+| "Re-sync now" for 5,000 events | ≤ 300 s | 900 s | paged JQL with `properties` (SPIKE-E3), batched entity upserts; progress in `resync:<projectKey>` |
 | Seed to board usable (properties + links) | ≤ 60 s | 600 s per step | bulk create; attachments lazy afterwards. SPIKE-S2 |
 | Seed attachments phase | ≤ 120 s more | – | runs in the background; the board shows "raw files uploading" |
 | Custom UI bundle (per resource) | ≤ 1.2 MB gz | 100 MB app | Atlaskit tree-shaking; jpeg-js only in `intake` |
@@ -1069,7 +1044,7 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 
 ## 14. Security and privacy
 
-- **No egress:** no `permissions.external` block. All Jira calls go through `requestJira`. TWG and LLM are Atlassian-hosted. The goal is `forge eligibility -e production` passing for Runs on Atlassian (SM-10). Static analysis in CI fails the build on any `fetch(` to a non-relative URL or any `external` manifest key.
+- **No egress:** no `permissions.external` block. All Jira calls go through `requestJira`. TWG is Atlassian-hosted. There is no Forge LLM. The goal is `forge eligibility -e production` passing for Runs on Atlassian (SM-10). Static analysis in CI fails the build on any `fetch(` to a non-relative URL or any `external` manifest key.
 - **Links out of the iframe:** the Custom UI sandbox has no `allow-popups` (VERIFIED, "Custom UI iframe" page), so evidence links use `router.open` / `router.navigate` from `@forge/bridge`, never `window.open` or `target=_blank`.
 - **Custom UI CSP:** no remote scripts, fonts or images. Everything is bundled. Thumbnails are data URIs from properties. `unsafe-inline` styles only if Atlaskit needs them (SPIKE-C1). The Web Worker is loaded from the same bundle (SPIKE-C3; fallback: main thread with chunked `await` yields).
 - **Server never decodes images** and never fetches attachment content (D1).
@@ -1078,7 +1053,7 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
   - Issue-specific calls do an asUser issue read.
   - Admin resolvers check `ADMINISTER` (global) or the project admin permission.
 - **Identity:** taken from the resolver or action `context.accountId`, never from inputs (VERIFIED guidance).
-- **Untrusted inputs:** action inputs, issue text and entity properties are all validated. Properties are re-verified against telemetry (D2). LLM outputs are validated and cannot change numbers or membership.
+- **Untrusted inputs:** action inputs, issue text and entity properties are all validated. Properties are re-verified against telemetry (D2), including on lazy panel re-processing.
 - **No PII by design:**
   - no driver identity field, no driver features, no driver ranking
   - synthetic frames only in the seed
@@ -1102,11 +1077,11 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 | 5 | Channels missing | mapping | Features that need them show "n/a (channel not mapped)"; type may be `unknown` | Map columns |
 | 6 | No takeover time | `E_NO_TAKEOVER` | Asks for manual takeover time | – |
 | 7 | TWG error, not permitted or empty | TwgPort classification | Routing via component lead, then project role; the UI states the source; diagnostics explain | Admin grants scopes; Atlassian support |
-| 8 | LLM off, failing or unbilled | toggle, exception, timeout | Deterministic names and template narratives | None needed |
+| 8 | **N/A (cut 2026-11-19).** Was: LLM off, failing or unbilled. There is no LLM; names and stub text are always templates | – | – | – |
 | 9 | Rovo not enabled on site | – | App works fully in Jira; diagnostics shows "Rovo: not detected (informational)" | – |
 | 10 | MCP exposure off | – | Nothing breaks; setup docs explain the toggle | Admin toggle |
-| 11 | Trigger delayed (≤ 3 min) or missed (SPIKE-V1) | reconcile diff | No user flow depends on it | Daily reconcile; admin "Re-sync now" |
-| 12 | Index drift (links edited by hand, issues deleted) | reconcile, panel cross-check | Panel shows "Out of sync – re-sync" and uses Jira links as truth | Reconcile |
+| 11 | Event written by another tool is not yet indexed (there is no issue-event trigger, D12; SPIKE-V1 N/A) | panel open finds no or a stale index row | Panel re-processes it lazily on open; board counts may lag until then | "Re-sync now" on the admin or project page |
+| 12 | Index drift (links edited by hand, issues deleted) | Re-sync, panel cross-check | Panel shows "Out of sync – re-sync" and uses Jira links as truth | "Re-sync now" (reconcile, §7.5) |
 | 13 | No drive sessions for builds | onset service | "Exposure unknown. Add drive sessions." No p-value | Admin adds sessions |
 | 14 | Scenario JQL invalid or empty | JQL 400 / 0 results | "No scenario tests found (looked for: <JQL>)" | Edit JQL in admin |
 | 15 | 429 rate limit during seed | HTTP 429 | Progress shows "waiting (rate limit)" | Exponential backoff via queue `delayInSeconds`; resumable steps |
@@ -1120,7 +1095,7 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 | 23 | Web Worker blocked by CSP (SPIKE-C3) | worker error | Main-thread processing with progress | – |
 | 24 | Reinstall finds old storage (kept 28 days, VERIFIED) | `seed:state` exists, issues missing | "Previous demo data found – Reset / Keep" | Reset wipes app storage rows with `synthetic = true` |
 | 25 | asUser consent not yet granted (SPIKE-A1) | consent error | Forge "Allow access" prompt; panel explains | User consents once |
-| 26 | Engine version change | `engine` field differs | Panel shows "computed with engine x.y"; reconcile recomputes features from telemetry | Automatic |
+| 26 | Engine version change | `engine` field differs | Panel shows "computed with engine x.y" and lazily recomputes features from telemetry | Automatic on panel open; "Re-sync now" for the whole project |
 
 ---
 
@@ -1130,15 +1105,15 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 
 | Layer | Tool | What | Gate |
 |---|---|---|---|
-| Unit | Vitest | Every engine module; services against in-memory fakes of `JiraPort`, `StoragePort`, `TwgPort`, `LlmPort` | CI, ≥ 90 % line coverage on `packages/engine` (SM-12) |
+| Unit | Vitest | Every engine module; services against in-memory fakes of `JiraPort`, `StoragePort`, `TwgPort` | CI, ≥ 90 % line coverage on `packages/engine` (SM-12) |
 | Property-based | fast-check (pinned major on day 1) | List below | CI. `numRuns` 1,000 by default, 10,000 nightly for stats |
-| Golden fixtures | Vitest snapshots of JSON | Seeds 1–5 end-to-end: CSV + JPEG to `tt.event` to clusters to onset to coverage. Any change needs `--update` and a review | CI |
+| Golden fixtures | Vitest snapshots of JSON + SHA-256 file manifests | Seeds 1–5 end-to-end: CSV + JPEG to `tt.event` to clusters to onset to coverage. Any change needs `--update` and a review. Generator byte hashes are **pinned to Node 22/24 in CI**; no bit-exact cross-engine math library (cut 2026-11-19, SEED_DATA §4.3) | CI (Node 22 and 24) |
 | Stats reference | `tools/eval/gen_reference.py` (scipy `binomtest`, `beta.ppf`), output committed | 2,000 `(k₁,e₁,k₂,e₂)` tuples; match to 1e-9 relative (SM-5) | CI |
-| Contract fixtures | JSON recorded from the demo site, PII-scrubbed | Jira search/property/link/bulk-create responses; TWG ok/empty/not-permitted responses; action `payload.context` from Rovo chat, automation and MCP (SPIKE-A2); LLM response | CI: adapters parse each fixture; actions produce schema-valid envelopes (Ajv against §10.3 schemas) |
+| Contract fixtures | JSON recorded from the demo site, PII-scrubbed | Jira search/property/link/bulk-create responses; TWG ok/empty/not-permitted responses; action `payload.context` from Rovo chat, automation and MCP (SPIKE-A2) | CI: adapters parse each fixture; actions produce schema-valid envelopes (Ajv against §10.3 schemas) |
 | Clustering quality | `tools/eval` | ARI ≥ 0.8 on unseen seeds 1000–1019 with params frozen (SM-4); identical-text split and different-text merge (SM-2/3) | CI on `params-*` changes; nightly |
 | Manifest / platform | `forge lint`, `forge eligibility -e staging` | Syntax, scopes, RoA | CI (lint), deploy job (eligibility) |
 | E2E smoke | Playwright against the **staging** install on the demo site | Panel renders on a seeded issue; intake with template CSV; board loads; one action via a resolver test hook | After each staging deploy |
-| Bot-QA (judge flow) | Playwright (`tools/bot-qa`) | See §16.3 | Nightly + before release |
+| Bot-QA (judge flow) | Playwright (`tools/bot-qa`) | See §16.3. Functional assertions only; no video-recording mode (cut 2026-11-19) | Nightly + before release |
 | Manual | checklist | Second clean site via the Sharing link (SM-1, x3), Rovo chat starters (SM-7), MCP from Claude Code (SM-8) | Week of Dec 14 |
 
 ### 16.2 fast-check properties (engine)
@@ -1197,7 +1172,7 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 - "Fresh site" is approximated by: admin "Remove demo data" → "Reset app storage" (dev-flagged admin action, hidden in production) → `forge uninstall` + `forge install --non-interactive -e staging` (VERIFIED flags).
 - A truly clean second site is a manual check (SM-1).
 
-**Script (each step timed, screenshot, `trace.zip` and video saved as CI artifacts):**
+**Script (each step timed; screenshot and `trace.zip` saved as CI artifacts). Bot-QA has no video-recording mode (cut 2026-11-19): the demo video is recorded by hand (DEMO_SCRIPT §5).**
 1. Open the admin page and click "Load demo data" with the default seed. Assert the progress bar reaches "Board ready" and **record `t_seed`** (target ≤ 60 s).
 2. Open "Takeover clusters" and assert: ≥ 4 clusters, one `regression-likely` on 4.12.0, ≥ 1 uncovered gap, novel queue ≥ 1. **Record `t_first_value` from step 1 start** (target ≤ 120 s, SM-1).
 3. Open identical-text ticket A (P1a): assert a match to the lane-loss cluster with confidence shown. Open ticket B (P1b): assert the lateral-drift cluster, with the bucket-rule row and F6/F2 as top contributors. Open the second identical-text pair (P3a/P3b): assert different clusters with F3/F4 (TTC/brake) as top contributors (SM-2; SEED_DATA §7.2, §13.2).
@@ -1211,13 +1186,13 @@ SPIKE-P1 covers resolver cold start and custom-entity query latency on the demo 
 
 Custom UI runs inside iframes, so the bot uses `frameLocator`. Selectors use `data-testid` attributes shipped in the UI (they carry no PII).
 
-### 16.4 CI (GitHub Actions, Node 24, pnpm)
+### 16.4 CI (GitHub Actions, Node 22 and 24, pnpm)
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `ci.yml` | PR, push | install (frozen lockfile) → `typecheck` (tsc -b, strict, 0 errors) → `lint` (eslint incl. engine purity rules; manifest check: no `external`, no `licensing`) → `test` (Vitest + fast-check, coverage gate) → `eval` (SM-2/3/4/5) → `build` (Vite x3, UI Kit bundle) → `forge lint` → `pnpm audit --audit-level=high` → SKILL.md copy-equality check |
+| `ci.yml` | PR, push; matrix Node 22 + 24 (golden hashes pinned to both) | install (frozen lockfile) → `typecheck` (tsc -b, strict, 0 errors) → `lint` (eslint incl. engine purity rules; manifest check: no `external`, no `licensing`) → `test` (Vitest + fast-check, coverage gate) → `eval` (SM-2/3/4/5) → `build` (Vite x3, UI Kit bundle) → `forge lint` → `pnpm audit --audit-level=high` → SKILL.md copy-equality check → no-LLM check (no `llm` module, no `@forge/llm`; SM-9) |
 | `deploy-staging.yml` | push to `main` | needs `ci` → `forge deploy -e staging --non-interactive` → `forge install --upgrade --site <demo> --product jira --non-interactive -e staging` → `forge eligibility -e staging` (artifact) → Playwright smoke. Uses `FORGE_EMAIL` + `FORGE_API_TOKEN` (scoped token) as GitHub secrets (VERIFIED approach) |
-| `bot-qa.yml` | nightly, manual | Full §16.3 run against staging; uploads trace, video and `qa-report.json` |
+| `bot-qa.yml` | nightly, manual | Full §16.3 run against staging; uploads trace, screenshots and `qa-report.json` |
 | `release.yml` | tag `v*` (manual approval) | `forge deploy -e production` → `forge eligibility -e production` (SM-10 artifact) → changelog. **Frozen** between Dec 19 and Feb 15, 2027, apart from critical fixes that do not change scopes |
 
 CI pins `@forge/cli@15` (VERIFIED current major) and uses `forge settings set usage-analytics false`.
@@ -1247,24 +1222,24 @@ Every unverified platform assumption, grouped by test date. PRD SPIKEs are repea
 | **SPIKE-S1** | App or user can create a project (and components) on a judge's site with `manage:jira-project`; which template works (team-managed vs company-managed) | Create via REST asUser from admin page | Week 1 | Seed into an admin-selected project with labels |
 | **SPIKE-S2** | Seed throughput within Jira rate limits and the Forge egress limit (whether `requestJira` counts toward 100/runtime-minute); bulk create ≤ 50 | Time a full seed | Week 1 | Fewer frames; lazy attachments; spread steps over queue events |
 | **SPIKE-S3** | Consumers can create issues, properties and links asApp, and the app user has project permissions in the newly created project | Seed step 1 | Week 1 | Browser-driven seed (asUser) with the page kept open |
-| **SPIKE-V1** | Whether setting an entity property fires `avi:jira:updated:issue`, and how `ignoreSelf` treats app writes | Observe events | Week 1 | Daily reconcile and admin "Re-sync now" |
+| **SPIKE-V1** | **N/A (cut 2026-11-19).** Was: whether setting an entity property fires `avi:jira:updated:issue`, and how `ignoreSelf` treats app writes. Moot: no issue-event trigger (D12) | – | – | Lazy panel re-processing and "Re-sync now" are the design |
 | **SPIKE-T1** | Curated query argument shapes (scope strings `read:graph:user:atlassian` and `read:graph:team:atlassian` are VERIFIED for the user-to-team traversal) (`atlassianTeamMembers`, `atlassianUserInTeams`), team ARI format | Schema `GET /gateway/api/graphql/twg/schema`; calls | Nov 23–27 | Component / project-role routing |
 | **SPIKE-R1** | TWG works from a resolver, from inside a Rovo action and from an MCP call (community reports failures in actions) | Same query from all 3 | Nov 23–27 | TWG only in UI resolvers; actions report `twgStatus: skipped` |
 | **SPIKE-T2** | Returning TWG-derived data through MCP is acceptable under the no-egress intent | Docs + forum question | Nov 27 | Already minimal: team name only, never members |
 | **SPIKE-R2** | Jira "Team" field writable by the app on judge sites, and its value format | PUT on the demo site | Week 1 | Component + comment mention |
 | **SPIKE-R3** | Rovo action latency, credit cost, UX for CREATE verbs (no documented `confirmation` property) | Timed chat runs | Week 1 | Keep `userConfirmed` friction; document the behaviour |
 | **SPIKE-R4** | App-provided `rovo:skill` attaches to the agent and is used on a judge site (Preview) | Chat test | Week 1 | Playbook inlined in the prompt; OSS SKILL.md still shipped |
-| **SPIKE-L1** | Forge LLM billing without a payment method; which model ids `list()` returns | Call `list()` and `chat()` | Week 1 | LLM off by default; templates |
-| **SPIKE-L2** | What the judge sees at install for the `llm` module. (Adding it is a **major version**, VERIFIED, so it is in or out by the Nov 27 freeze) | `forge lint` / install | Week 1 | Drop the `llm` module entirely; templates only |
+| **SPIKE-L1** | **N/A (cut 2026-11-19).** Was: Forge LLM billing without a payment method; which model ids `list()` returns | – | – | Moot: no LLM; templates only |
+| **SPIKE-L2** | **N/A (cut 2026-11-19).** Was: what the judge sees at install for the `llm` module (a major version, VERIFIED) | – | – | Moot: the `llm` module is dropped entirely |
 | **SPIKE-P1** | Resolver cold start + custom-entity query latency fit the §13 budgets | Timed board/panel loads | Week 2 | More aggressive KVS caching; precompute in the consumer |
 | **SPIKE-D1** | Personal-data reporting obligations for stored accountIds in a Sharing-link app | Docs | Week 2 | Store accountIds only in Jira properties; none in KVS |
-| **SPIKE-Q1** | Playwright can log in to Atlassian with a test account (2SV, bot detection), or reuse `storageState` for days | Bot-QA spike | Week 2 | Manual login refresh; reduce bot-QA to staging smoke |
+| **SPIKE-Q1** | Playwright can log in to Atlassian with a test account (2SV, bot detection), or reuse `storageState` for days (functional bot-QA only; no video mode) | Bot-QA spike | Week 2 | Manual login refresh; reduce bot-QA to staging smoke |
 | **SPIKE-N1** | Product name availability and trademark (PRD) | Search | By Dec 1 | Takeover Triage |
 | **SPIKE-X1** | A second `forge site provision` demo site is allowed without retiring the recording site (MILESTONES §7, RISKS R-19) | Docs / try | Nov 21 | Free developer site or second account |
 | **SPIKE-X2** | A free developer site has Rovo (needed for SM-7 on the clean site) | Check | Nov 21 | SM-7 verified only on the demo site, stated in SETUP.md |
-| **SPIKE-G1–G4** | Generator determinism, seed CPU budget, render metric bands, onset power ([SEED_DATA §17](SEED_DATA.md#17-spike-register)) | See SEED_DATA | Week 1 – Dec 4 | See SEED_DATA |
+| **SPIKE-G1–G4** | Generator determinism (G1: N/A, cut 2026-11-19; golden hashes pinned to Node 22/24), seed CPU budget, render metric bands, onset power ([SEED_DATA §17](SEED_DATA.md#17-spike-register)) | See SEED_DATA | Week 1 – Dec 4 | See SEED_DATA |
 
-**Go/no-go on Fri Nov 27:** if SPIKE-I1, I2 (browser side) and I4 all fail without a workaround, fall back to Option C (PRD §12). **Scopes and major-version items (TWG scopes, `manage:jira-project`, `llm`, US-16 scopes, Assets) are frozen the same day.**
+**Go/no-go on Fri Nov 27:** if SPIKE-I1, I2 (browser side) and I4 all fail without a workaround, fall back to Option C (PRD §12). **Scopes and major-version items (TWG scopes, `manage:jira-project`, US-16 scopes, Assets) are frozen the same day.** (`llm` is cut, 2026-11-19.)
 
 ---
 
@@ -1272,15 +1247,15 @@ Every unverified platform assumption, grouped by test date. PRD SPIKEs are repea
 
 | PRD item | Architecture section |
 |---|---|
-| US-01–03 seed, no-seed, diagnostics | §9, §7.4, §11 diagnostics, §15 #16, #24 |
+| US-01–03 seed, no-seed (incl. Re-sync and lazy re-processing), diagnostics | §9, §7.4, §7.5, §8, §11 diagnostics, §15 #11, #16, #24 |
 | US-04–06 intake, mapping, add telemetry | §1.1, §5.1–5.6, §6.1 |
 | US-07–08 signatures and chips | §5.3–5.5 |
 | US-09–13 clustering, why, actions, board, empty states | §5.7–5.8, §7.5, §10.3 |
 | US-14 onset | §5.9 |
-| US-15–16 routing / TWG | §5.11, §11 |
+| US-15–16, US-27 routing / TWG | §5.11, §11 |
 | US-17–18 coverage and stub | §5.10 |
 | US-19–20 agent, skill, MCP | §10 |
-| US-21 LLM | §12 |
+| US-21 template names and text (LLM cut) | §5.8, §5.10, §12 |
 | US-22–26 stretch | §5.12 (calibration), §5.5 dHash, §3 Assets scope note; what-if runs the engine in the board bundle with no server change |
 | SM-1–12 | §13, §16 |
 
@@ -1324,3 +1299,17 @@ Every unverified platform assumption, grouped by test date. PRD SPIKEs are repea
 22. §17: added SPIKE-X1, X2 (from MILESTONES) and a pointer row for SEED_DATA SPIKE-G1–G4.
 
 **Open concerns (not fixed here; for the owner to decide):** see the review hand-off. The main ones: the plan is about 1.5–2x one developer's capacity for 30 days; the full generator has no scheduled days before G2 needs it; SPIKE-I2 (attachments) and SPIKE-S2/G2 (seed in ≤ 60 s) are the riskiest unverified items on the judge path.
+
+**2026-11-19, scope-cut pass (developer-approved scope decisions, same day).** Applied consistently across PRD, ARCHITECTURE, MILESTONES, RISKS, DEMO_SCRIPT and SEED_DATA. PRD scope is now marked **APPROVED 2026-11-19**.
+
+1. **Forge LLM dropped.** No `llm` module, no `tt-llm` consumer or `llm-job` function, no `LlmPort`/adapter, no admin toggle, no `nameAi` field (`tt.cluster`, `cluster` entity, `clusterRef`), no `useAiNarrative` input on `create-scenario-stub`. Cluster names, symptom text and stub descriptions are templates only: PRD principle 4, US-03, US-18 AC2, US-21 (now "(M) deterministic names and text"), SM-9 (now a CI no-LLM check); §0 D9, §1, §2, §3, §4, §5.8, §6.1, §7.3, §7.4, §8, §10.3, §12, §14, §15 #8 (N/A), §16, §18. SPIKE-L1/L2 marked N/A. RISKS R-06 closed.
+2. **Issue event trigger and daily reconcile scheduled trigger removed.** New D12: "Re-sync now" on the admin page and the project page enqueues the existing `tt-recluster` consumer with `reason: "resync"` (it now runs the §7.5 reconcile first; timeout 300 s → 900 s), plus lazy re-processing in `getPanel` when the index row is missing or stale. §1, §2.1–2.2 (functions ~14 → 12), §7.4 (`resync:<projectKey>` key), §7.5, §8, §11, §13, §15 #11/#12/#26; PRD module table, US-02 AC4, §8.1. SPIKE-V1 marked N/A.
+3. **Bit-exact cross-engine math library dropped** (SEED_DATA `dmath`, G-T9 N/A, SPIKE-G1 N/A). Golden hashes are pinned to Node 22/24 in CI (§16.1, §16.4 matrix; SEED_DATA §4.3).
+4. **Dashcam renderer simplified** to sky gradient, road, lane lines, sun glare blob, night darkening, rain blur/streaks and the SYNTHETIC watermark (§9; SEED_DATA §0, §7.1 LC-D, §7.2 N1, §9.1–9.4, §18). Night p95 lower bound dropped; SPIKE-G3 re-checks the bands.
+5. **Bot-QA video-recording mode dropped**; functional assertions stay (§4, §16.1, §16.3, §16.4). The demo is recorded by hand, Playwright screenshots optional (DEMO_SCRIPT §5; MILESTONES Dec 10, Dec 17).
+6. **Teamwork Graph "my teams" filter deferred to stretch** as new **US-27** (PRD US-15 AC5, §6.10, §8.2 item 7; §3, §11, §18). TWG team routing with fallback stays MVP.
+7. **Two full seed-generator days (Tue Dec 1, Wed Dec 2) before G2** in MILESTONES, with a time-accounting table (MILESTONES §3a). Similarity moves to Nov 30, codec to Nov 25, coverage core to Dec 9, column mapping + US-06 + re-evaluation draft to Dec 10. No gate or freeze date moves. PRD §15 aligned.
+8. **Marketplace skipped.** Optional Marketplace track and its user actions removed (MILESTONES §3 Nov 21, §6, §8; PRD header, §8.3, §12, §15; DEMO_SCRIPT §6; RISKS R-21 closed). Primary bonus Rovo Agents; MCP also declared (MILESTONES Dec 19).
+9. **RISKS:** R-16 rewritten for capacity after the cuts (L stays 3; the cuts fund the generator days); R-06 closed; R-05/R-10/R-20 and the watch calendar no longer mention the LLM; two accepted residual risks added (Node-pinned seed bytes; index freshness without triggers).
+
+IDs kept: no story, feature (F1–F10), SPIKE or action key was renumbered. MILESTONES cut items 2 and 3 are marked N/A rather than deleted, so "cut #5" and "items 1–6" references still hold.

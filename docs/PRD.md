@@ -1,8 +1,8 @@
 # PRD: Takeover Triage
 
-**Status:** Draft v1, 2026-11-19. Owner: solo developer.
+**Status:** Draft v1, 2026-11-19. **Scope: APPROVED 2026-11-19** (developer sign-off on the scope cuts listed in section 8.3 and the ARCHITECTURE Review log). Owner: solo developer.
 **Event:** Codegeist 2026. Hard deadline **Tue Dec 22, 2026, 3:00 pm EST**. Internal submit target **Sat Dec 19, 2026**.
-**Category:** Specialized Industries (automotive). **Primary bonus:** Best Rovo Agents. **Also qualifies for:** Best MCP (`rovo:mcp`). **Secondary:** Teamwork Graph (consume). **Marketplace bonus:** not planned. Decision due **Sat Nov 21** (see section 12).
+**Category:** Specialized Industries (automotive). **Primary bonus:** Best Rovo Agents. **Also declared:** Best MCP (`rovo:mcp`). **Secondary:** Teamwork Graph (consume). **Marketplace bonus:** skipped (decided 2026-11-19, see section 12).
 
 **Sources:** [research/BRIEF.md](research/BRIEF.md) (including the Critic review), [research/forge-platform.md](research/forge-platform.md), [research/rovo-mcp-twg.md](research/rovo-mcp-twg.md), [research/rules.md](research/rules.md), [ideation/TOURNAMENT.md](ideation/TOURNAMENT.md) (Option A, the I21 critic findings, and the appendix for I21, I22, I23 and I27).
 
@@ -91,7 +91,7 @@ The personas are **composite archetypes** written for this PRD. They are not rea
 1. **A human accepts every link.** The app proposes. It never links, splits, routes or creates an issue without a user action: a button click, or an explicit request in Rovo Chat, which is recorded with that user's accountId taken from the invocation context ([rovo-mcp-twg §2.2](research/rovo-mcp-twg.md)).
 2. **Evidence, confidence and "why" on every recommendation.** Each suggestion shows links to the source issues and attachments, a confidence value with its definition, and the rule or distance that produced it.
 3. **The core is deterministic.** Parsing, signatures, image metrics, clustering, the onset statistic and coverage are pure TypeScript functions with no LLM, covered by property-based tests (fast-check). Same input, same output, in any order.
-4. **The LLM is cosmetic and optional.** Forge LLM (text only) may only name clusters, normalise symptom text and draft stub narratives. Each of these has a deterministic template fallback, and the app is fully usable with the LLM switched off.
+4. **No LLM in the app (cut 2026-11-19).** The app has no Forge LLM (`llm` module) and no LLM features. Cluster names, symptom text and scenario-stub descriptions come from deterministic templates only (US-21). The only LLM involved is Rovo's own agent runtime, which calls the deterministic actions.
 5. **Honest data.** Every seeded item is labelled `[SYNTHETIC]` in the summary, has a description banner, and its images carry a "SYNTHETIC" watermark. There are no fake users, testimonials, OEM names or real-world logos. No employer code, data or text is used.
 6. **No driver scoring.** Driver identity is never a feature, and nothing ranks or rates drivers ([TOURNAMENT, I21 ethics](ideation/TOURNAMENT.md)).
 7. **Not a safety-certified tool.** The app surfaces evidence for engineers and makes no safety, homologation or ISO 26262 / ISO 21448 compliance claims. That disclaimer appears in the app and in the listing.
@@ -122,12 +122,12 @@ The personas are **composite archetypes** written for this PRD. They are not rea
 
 | Module | UI tech | Purpose |
 |---|---|---|
-| `jira:adminPage` "Takeover Triage setup" | UI Kit (ARCHITECTURE D11) | Load demo data (seed), choose the project, thresholds, team-mapping config, diagnostics (TWG, LLM, storage checks). |
-| `jira:projectPage` "Cluster board" | Custom UI | Clusters with counts, build onset, coverage gap, novel queue, and the "File takeover" button that opens the intake modal. |
+| `jira:adminPage` "Takeover Triage setup" | UI Kit (ARCHITECTURE D11) | Load demo data (seed), choose the project, thresholds, team-mapping config, diagnostics (TWG, storage checks), **"Re-sync now"**. |
+| `jira:projectPage` "Cluster board" | Custom UI | Clusters with counts, build onset, coverage gap, novel queue, the "File takeover" button that opens the intake modal, and **"Re-sync now"**. |
 | Intake modal (from the project page and the issue action) | Custom UI | CSV + JPEG intake, column mapping, client-side computation, preview before create. |
-| `jira:issuePanel` "Takeover signature" | Custom UI (SVG) | Signal plot with takeover marker, condition chips, top-3 similar events side by side, why-table, Accept / Split / Route. |
-| `jira:issueAction` "Triage now" | UI Kit or Custom UI | Runs matching on demand. This avoids the up-to-3-minute product-event lag in the demo ([BRIEF §4 Triggers](research/BRIEF.md)). Also "Add telemetry" for non-seeded tickets. |
-| `trigger` on `avi:jira:created:issue` + async consumer | none | Background matching for tickets that already carry the `tt.event` property. Optional, so the demo never depends on it. |
+| `jira:issuePanel` "Takeover signature" | Custom UI (SVG) | Signal plot with takeover marker, condition chips, top-3 similar events side by side, why-table, Accept / Split / Route. On open, it lazily re-processes the event if its index row is missing or stale. |
+| `jira:issueAction` "Triage now" | UI Kit or Custom UI | Runs matching on demand. There is no background issue-event trigger (cut 2026-11-19). Also "Add telemetry" for non-seeded tickets. |
+| `consumer` `tt-recluster` (rebuild) | none | Background re-clustering and index rebuild. Enqueued by intake and actions, by lazy panel re-processing, and by the "Re-sync now" button on the admin and project pages. Replaces the cut issue-event trigger and daily reconcile scheduled trigger. |
 | `rovo:agent` "Fleet Triage" | Rovo | Uses the actions below and the skill. |
 | `rovo:skill` "monday-takeover-triage" | SKILL.md | The triage playbook. Also published as an open-source SKILL.md in the repo. |
 | `action` x 7 to 9 | none | The shared tool layer (section 7). |
@@ -156,9 +156,10 @@ Priority: **M** = MVP (must ship by Dec 19), **S** = stretch.
 - AC1: Admin config lets me select project(s) and the issue type(s) treated as takeover events, defaulting to any issue carrying the `tt.event` property.
 - AC2: If the project has no events, the board shows an empty state with two calls to action: "File a takeover" and "Load demo data". It never shows an error.
 - AC3: SPIKE-S1: if creating a project or issue type is not permitted with the app's scopes or the user's rights, the seed falls back to an admin-selected existing project with label-based typing (`tt-takeover`, `tt-scenario`, `tt-cluster`).
+- AC4: There is no background issue-event trigger and no scheduled reconcile (cut 2026-11-19). Events whose `tt.event` property was written by another tool are indexed when someone opens their issue panel (lazy re-processing), or for the whole project when a user clicks **"Re-sync now"** on the admin page or the project page, which enqueues the existing `tt-recluster` rebuild consumer.
 
 **US-03 (M) Diagnostics.** As an admin, I want a diagnostics panel so I can see which optional capabilities work on my site.
-- AC1: It shows a pass, fail or unknown state for the TWG read, Forge LLM, the Rovo agent presence (informational), entity-property write and storage, each with a plain-language consequence ("TWG unavailable: routing uses project components").
+- AC1: It shows a pass, fail or unknown state for the TWG read, the Rovo agent presence (informational), entity-property write and storage, each with a plain-language consequence ("TWG unavailable: routing uses project components").
 - AC2: An empty TWG result is reported as "possibly a missing scope or no data", because missing scopes fail silently ([BRIEF §5 TWG gotchas](research/BRIEF.md)).
 
 ### 6.2 Intake
@@ -242,9 +243,10 @@ Priority: **M** = MVP (must ship by Dec 19), **S** = stretch.
 
 **US-15 (M) Suggest the owning team.** As a triage engineer, I want the app to suggest who owns a cluster so I do not look it up.
 - AC1: Admin config maps takeover type and/or component to an owning team. The team picker is backed by Atlassian Teams through the Teamwork Graph where available.
-- AC2: With TWG working, the suggestion shows the team and its members (through curated queries such as `atlassianTeamMembers`; `atlassianUserInTeams` drives "clusters routed to my teams"), called **as the user** ([rovo-mcp-twg §2.7](research/rovo-mcp-twg.md)).
+- AC2: With TWG working, the suggestion shows the team and its members (through curated queries such as `atlassianTeamMembers`), called **as the user** ([rovo-mcp-twg §2.7](research/rovo-mcp-twg.md)).
 - AC3: With TWG unavailable, erroring ("not permitted to query this organization") or empty, routing falls back to the project component lead, then the project role. The UI says which source was used.
 - AC4: The suggestion always shows "why": the mapping rule that matched and the data source.
+- AC5: The "clusters routed to my teams" board filter (`atlassianUserInTeams`) is **deferred to stretch** (US-27, 2026-11-19). TWG team routing with fallback stays in the MVP.
 
 **US-16 (S) Related work via TWG.** As a build owner, I want to see the work linked to the onset build (for example, issues fixed in that version, or linked PRs and deployments if the site has them) as context, with no claim of causality.
 - AC1: Shown only when TWG returns data. Otherwise the section is hidden, not shown as an error.
@@ -259,7 +261,7 @@ Priority: **M** = MVP (must ship by Dec 19), **S** = stretch.
 
 **US-18 (M) One-click scenario stub.** As a safety engineer, I want to create a scenario-test stub from a gap.
 - AC1: One click creates an issue with the tags pre-filled, links to the cluster and 3 representative events, includes a deterministic template description, and carries the label `tt-scenario`.
-- AC2: An optional LLM narrative (US-21) is drafted into the description only after the user previews it. The template is used if the LLM is off or fails.
+- AC2: The description is the deterministic template only (US-21); the user previews it before the issue is created. There is no LLM narrative (cut 2026-11-19).
 
 ### 6.8 Rovo agent, skill and MCP
 
@@ -275,13 +277,13 @@ Priority: **M** = MVP (must ship by Dec 19), **S** = stretch.
 - AC2: `rovo:mcp` exposes the same action keys (at most 50 tools; name ≤ 30 chars). The demo shows one tool call from an external MCP client through `https://mcp.atlassian.com/forge/<appId>` after an admin enables exposure ([rovo-mcp-twg Key fact 4](research/rovo-mcp-twg.md)).
 - AC3: MCP tools return **derived findings** (cluster ids, verdicts, counts and links), not raw TWG data. This respects the TWG no-egress intent ([BRIEF §10 #5](research/BRIEF.md)).
 
-### 6.9 Optional LLM
+### 6.9 Template text (LLM cut 2026-11-19)
 
-**US-21 (S, MVP-lite) LLM polish with fallback.** As a user, I want readable cluster names and normalised symptoms without depending on an LLM.
-- AC1: Uses Forge LLM (text only), with the model id read from config ([BRIEF §4 LLM](research/BRIEF.md)). Inputs are only the deterministic signature, the chips and the driver notes, never images.
-- AC2: The deterministic fallback name is `<type> · <top chip> · <sensor variant>`, for example "Lane-loss · low sun · cam-B".
-- AC3: LLM output is marked "AI-drafted" and is editable. It never changes cluster membership, verdicts or numbers.
-- AC4: An admin toggle turns it off. A failure or timeout falls back silently, and diagnostics shows the state.
+**US-21 (M) Deterministic names and text, no LLM.** As a user, I want readable cluster names, symptom summaries and stub descriptions that are the same on every run. (Revised 2026-11-19: the Forge LLM is dropped; this story is now template-only and MVP.)
+- AC1: No Forge LLM is used anywhere: no `llm` module, no `@forge/llm` dependency, no admin toggle.
+- AC2: The cluster name is `<type> · <top chip> · <sensor variant>`, for example "Lane-loss · low sun · cam-B".
+- AC3: The symptom summary is a template over the deterministic signature (type, chips, variant, top features), shown next to the verbatim driver notes. Driver text is never rewritten.
+- AC4: Scenario-stub descriptions use the deterministic template of US-18 (ARCHITECTURE §5.10). Names stay editable by the user (`create-cluster` `name` input).
 
 ### 6.10 Stretch
 
@@ -294,6 +296,8 @@ Priority: **M** = MVP (must ship by Dec 19), **S** = stretch.
 **US-25 (S) Assets adapter.** Read vehicles from Jira Assets when it is present and licensed. Otherwise, use the storage registry (the default).
 
 **US-26 (S) Drive-session CSV import.** Bulk import of drive sessions with column mapping. In the MVP, sessions are seeded or entered one by one in the admin page.
+
+**US-27 (S) "My teams" board filter (deferred from US-15 on 2026-11-19).** A board filter "clusters routed to my teams", backed by the TWG query `atlassianUserInTeams` for the current user (asUser). Hidden when TWG is unavailable.
 
 ---
 
@@ -317,17 +321,21 @@ Provisional keys, all backed by the same pure core:
 
 ## 8. Scope
 
+**Scope status: APPROVED 2026-11-19.**
+
 ### 8.1 MVP (must ship by Sat Dec 19)
 
-US-01 to US-15, US-17 to US-20, and US-21 in its LLM-off-capable form. Concretely:
+US-01 to US-15, US-17 to US-20, and US-21 (template-only, no LLM). Concretely:
 - admin seed with progress, reset and diagnostics; project and issue-type fallback
+- "Re-sync now" on the admin and project pages (enqueues `tt-recluster`) plus lazy re-processing on issue-panel open; no background triggers
 - Custom UI intake with column mapping and client-side CSV and jpeg-js decoding; entity property; attachments
 - signal signature rules and image chips; rule bucket + kNN + τ novelty; why-table; side-by-side plots
 - Accept / Split / Route with undo; cluster board with novel queue and "since last triage"
 - exact Poisson onset test with Holm and not-enough-data states; drive sessions in storage
 - deterministic coverage gap + 2D view + one-click stub
-- TWG routing with fallback
+- TWG routing with fallback (the "my teams" filter is stretch, US-27)
 - Rovo agent + skill + rovo:mcp over the shared actions
+- deterministic template names and text (US-21); no LLM
 - fast-check property tests on the whole core; TypeScript strict; ADS styling; light and dark themes
 
 ### 8.2 Stretch (only after the MVP is demo-complete, in this order)
@@ -338,6 +346,7 @@ US-01 to US-15, US-17 to US-20, and US-21 in its LLM-off-capable form. Concretel
 4. US-26 Drive-session CSV import
 5. US-24 dHash
 6. US-25 Assets adapter
+7. US-27 "My teams" board filter
 
 ### 8.3 Explicit cut list (will not be built for Codegeist)
 
@@ -348,7 +357,12 @@ US-01 to US-15, US-17 to US-20, and US-21 in its LLM-off-capable form. Concretel
 | Object Store (Preview) | Attachments + entity properties suffice |
 | 3D coverage cube (three.js) | "Visual over substance" risk ([I27 critic](ideation/TOURNAMENT.md)) |
 | Server-side image or CSV decoding | Attachment egress is blocked (403 BLOCKED_EGRESS via api.media.atlassian.com) |
-| Any ML or vision model, Forge Containers | Paid Preview, setup burden, and the LLM has no image input |
+| Any ML or vision model, Forge Containers | Paid Preview, setup burden, and no image input |
+| Forge LLM (`llm` module) and every LLM feature: AI cluster names, symptom normalisation, stub narratives (cut 2026-11-19) | Deterministic templates cover all three (US-21). Avoids a major-version module, billing and model retirement |
+| Issue event trigger (`avi:jira:created/updated:issue`) and the daily reconcile scheduled trigger (cut 2026-11-19) | Replaced by "Re-sync now" (admin and project page, enqueues `tt-recluster`) and lazy re-processing on issue-panel open (US-02 AC4) |
+| Bit-exact cross-engine math library in the seed generator (cut 2026-11-19) | Golden hashes are pinned to Node 22/24 in CI instead ([SEED_DATA §4.3](SEED_DATA.md)) |
+| Detailed dashcam rendering: lens flares, headlight cones, traffic cones, overpass detail (cut 2026-11-19) | The renderer draws only what the image metrics need ([SEED_DATA §9](SEED_DATA.md)) |
+| Bot-QA video-recording mode (cut 2026-11-19) | Bot-QA keeps its functional assertions; the demo is recorded by hand, Playwright screenshots optional ([DEMO_SCRIPT §5](DEMO_SCRIPT.md)) |
 | LLM tagging of scenario tests | The critic's I27 objection. Tags are deterministic, from labels or properties only. |
 | `rovo:agentConnector`, Forge Remote | Needs hosting and breaks RoA |
 | `graph:connector` (TWG ingest) | Would need a second app (the possible "API or connector, not both" rule) |
@@ -356,7 +370,7 @@ US-01 to US-15, US-17 to US-20, and US-21 in its LLM-off-capable form. Concretel
 | Covering-array scenario generation | I27 scope; one stub per gap is enough |
 | Video or log ingestion beyond a 20 s CSV window and 4 stills | Payload and storage limits |
 | Driver analytics of any kind | Ethics principle 6 |
-| Marketplace listing | Pending the decision on Nov 21 (section 12) |
+| Marketplace listing and the optional Marketplace track | Skipped (decided 2026-11-19, section 12) |
 
 ---
 
@@ -400,7 +414,7 @@ In the video, show the column-mapping preset for one non-automotive CSV (for exa
 | SM-6 | Non-seeded ticket | A judge-made CSV (the template edited by hand) produces a sensible signature and either a match or "novel"; a ticket with no data shows the "Add telemetry" state | A manual test on a clean site |
 | SM-7 | Rovo agent | All 4 conversation starters answer correctly with issue-key citations; action p95 < 5 s | A manual run on the demo site, timed |
 | SM-8 | MCP | One tool call succeeds from an external MCP client | A screen recording |
-| SM-9 | LLM-off parity | With the LLM disabled, every MVP story still passes its ACs | A test run with the toggle off |
+| SM-9 | No LLM (revised 2026-11-19) | The manifest has no `llm` module and the code has no `@forge/llm` import; names and stub text are template output | CI manifest and dependency check |
 | SM-10 | RoA and egress | `forge eligibility -e production` passes; no `fetch.backend` entries | CLI output saved in the repo |
 | SM-11 | Video | Under 5:00. Split + merge land before 1:00 and the onset verdict before 2:00 (amended from "all before 1:30" to match DEMO_SCRIPT §3). Bonus modules are shown on screen. | Video timeline |
 | SM-12 | Core test coverage | ≥ 90% line coverage on `core/`, 0 TypeScript `strict` errors, 0 critical/high `npm audit` findings | CI |
@@ -413,7 +427,7 @@ Post-hackathon impact metrics, stated as **hypotheses only**, are not measured i
 
 | Decision | Due | Default if undecided |
 |---|---|---|
-| Marketplace bonus (two app IDs, KYC, review time; [BRIEF §6](research/BRIEF.md)) | **Sat Nov 21** | **Do not pursue.** Keep the code free of `license` so the Sharing link works. |
+| Marketplace bonus (two app IDs, KYC, review time; [BRIEF §6](research/BRIEF.md)) | **Decided 2026-11-19** | **Skipped.** Keep the code free of `license` so the Sharing link works. Primary bonus Rovo Agents; MCP also declared. |
 | Primary bonus confirmed (Agents vs TWG) after the week-1 spike | Fri Nov 27 | Agents. TWG stays secondary unless the TWG reads work reliably inside actions. |
 | Product name | Mon Dec 1 | Takeover Triage |
 | Fall back to Option C (SOX Change Pack) if the day-1 intake spike fails without a workaround ([TOURNAMENT recommendation](ideation/TOURNAMENT.md)) | Fri Nov 27 | Continue with A |
@@ -434,7 +448,7 @@ Post-hackathon impact metrics, stated as **hypotheses only**, are not measured i
 | SPIKE-R2 | Is the Jira "Team" field writable by the app on judges' sites, and in what format? | Route action | Week 1 | Component + comment mention |
 | SPIKE-R3 | Rovo action latency, credit cost and write-action confirmation UX (no `confirmation` property is documented) | US-19 | Week 1 | Keep write actions; the response states the effect plus undo in the panel; document the behaviour observed |
 | SPIKE-R4 | Does an app-provided `rovo:skill` attach to the agent and work on a judge's site? (Preview) | US-20 | Week 1 | Put the playbook in the agent prompt; still ship the OSS SKILL.md |
-| SPIKE-L1 | Forge LLM billing without a payment method, and which model ids are available | US-21 | Week 1 | LLM off by default for judges; the template names are good enough |
+| SPIKE-L1 | **N/A (cut 2026-11-19).** Was: Forge LLM billing without a payment method, and which model ids are available | – | – | Moot: no LLM; US-21 is template-only |
 | SPIKE-N1 | Name availability and trademark checks | Section 0 | By Dec 1 | Takeover Triage |
 
 ---
@@ -448,7 +462,7 @@ The full register, with likelihood, impact, owner and mitigation, is in **[RISKS
 3. **Seed circularity / "rigged demo" perception:** seeded noise, user-chosen seeds, evaluation on unseen seeds (SM-4), the why-table, column mapping for the judge's own CSVs, and (stretch) the what-if page.
 4. **Judge install friction** (admin rights, scopes, MCP exposure toggle): minimum scopes; diagnostics panel; written "Requires…" notes; no keys.
 5. **Strong Specialized Industries rivals** (Lab QC, Clean Point, Scrutineer and others): win on the visible signal-based aha moment and on statistical honesty, not on novelty alone.
-6. **Scope creep for a solo developer new to Forge:** hold the cut list; the stretch order is fixed; the MVP must be demo-complete by **Fri Dec 11**.
+6. **Scope creep for a solo developer new to Forge:** the 2026-11-19 cuts (section 8.3) fund 2 full seed-generator days before G2; hold the cut list; the stretch order is fixed; the MVP must be demo-complete by **Fri Dec 11**.
 7. **Rovo Agents is the most contested bonus:** agent actions that only this engine can answer; MCP as the alternative.
 8. **Misreading the statistics:** Holm correction, "screening signal" wording, and not-enough-data states.
 9. **Over-claiming safety:** the disclaimer in the app, video and listing; human-in-the-loop by construction.
@@ -459,10 +473,10 @@ The full register, with likelihood, impact, owner and mitigation, is in **[RISKS
 
 | Dates | Milestone |
 |---|---|
-| Nov 19–21 | Accounts, demo site, Devpost draft, Marketplace decision (Nov 21). **Day-1 intake spike** (I1–I4) on Nov 20. |
+| Nov 19–21 | Accounts, demo site, Devpost draft. **Day-1 intake spike** (I1–I4) on Nov 20. (Marketplace: skipped, decided Nov 19.) |
 | Nov 23–27 | Rovo / MCP / TWG spike (R1–R4), seed spike (S1–S2). Bonus confirmed. Go/no-go on Option A. |
-| Nov 28 – Dec 4 | Core (parse, signature, chips, cluster, Poisson, coverage) with property tests; intake modal; issue panel; **cluster board** (pulled forward, MILESTONES §1). |
-| Dec 5–11 | In-app seed, actions, routing, coverage UI + stub, agent + skill + MCP. **MVP demo-complete Dec 11.** |
+| Nov 28 – Dec 4 | Core (parse, signature, chips, cluster, Poisson) with property tests; **full seed generator (2 days, Dec 1–2)**; issue panel; **cluster board** (pulled forward, MILESTONES §1). |
+| Dec 5–11 | In-app seed, "Re-sync now", actions, routing, coverage core + UI + stub, column mapping, agent + skill + MCP. **MVP demo-complete Dec 11.** |
 | Dec 12–16 | Stretch in order; hardening on a clean site; setup instructions; SM-1 to SM-12 runs. |
 | Dec 17–18 | Production deploy, Sharing link tested on a second clean site, video recorded and uploaded publicly. |
 | **Sat Dec 19** | **Submit on Devpost.** Dec 20–22 is buffer only. |

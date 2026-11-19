@@ -21,7 +21,7 @@
 | Drive sessions | **40** over 6 synthetic weeks, ≈ 6,400 km, with route / light / weather tags | §6 |
 | Takeover events | **≈ 30** (≈ 25 Poisson-sampled + 7 planted): **4 latent clusters + 1 novel**, 2 boundary events, 2 identical-text/different-signal pairs, 1 different-text/same-signal pair | §7 |
 | Telemetry | 1 CSV per event, 30 s raw window, 50/100/200 Hz, 8 canonical channels + 2 decoy columns, documented noise models, 9 deliberate format quirks | §8 |
-| Dashcam stills | 1 to 4 JPEGs per event, 1280x720, procedurally rendered (sky, road, lane lines, low-sun glare, night, rain, overpass, cones), visibly watermarked **SYNTHETIC** | §9 |
+| Dashcam stills | 1 to 4 JPEGs per event, 1280x720, procedurally rendered with only what the image metrics need (sky gradient, road, lane lines, sun glare blob, night darkening, rain blur/streaks), visibly watermarked **SYNTHETIC** | §9 |
 | Scenario tests | **10** issues with deterministic condition tags. **One deliberate gap**: lane-loss x low-sun-glare x cam-B x highway | §11 |
 | Owner mapping | 3 components (Perception, Planning, Controls) + ordered routing rules; optional binding to the judge's own Atlassian Teams | §12 |
 | Ground truth | Regenerated from `(seed, generatorVersion)` on demand. Never written into issue data | §14 |
@@ -49,7 +49,7 @@ This file follows the latest planning brief, which differs in some counts from P
 
 ## 2. Design principles
 
-1. **Pure and deterministic.** `generateFleet(config)` is a pure function of `{seed, anchorDate, profile, generatorVersion}`. It reads no clock, uses no `Math.random`, and no transcendental `Math.*` functions on any path that affects output bytes (§4.3). The same input gives the same bytes, in any order of generation.
+1. **Pure and deterministic.** `generateFleet(config)` is a pure function of `{seed, anchorDate, profile, generatorVersion}`. It reads no clock and uses no `Math.random`. The same input gives the same bytes, in any order of generation, on the pinned CI runtimes (Node 22 and 24, §4.3). There is no bit-exact cross-engine math library (cut 2026-11-19).
 2. **Same code path as real intake.** Every seeded event goes through `engine.processEventFiles(csvBytes, jpegBytes[], mapping)`, the same function the intake Web Worker calls. The seed never writes precomputed features or chips (PRD US-01 AC2). The generator produces *files*; the engine turns files into `tt.event`.
 3. **Outcomes are drawn, not written.** Event counts per build are Poisson draws against the generated km. The onset verdict, the cluster structure and the chips are whatever the engine computes from those files. The generator knows the latent truth; the app never sees it.
 4. **No truth leakage.** Issue summaries, descriptions, labels, properties, file names and image pixels carry no latent-cluster id, no archetype name and no expected verdict. Driver notes are drawn from a pool shared across clusters (§10).
@@ -65,13 +65,12 @@ This file follows the latest planning brief, which differs in some counts from P
 packages/seedgen/
 ├── src/
 │   ├── rng/            # splitmix32, xoshiro128**, fork(label), uniform, irwinHallNormal, poisson
-│   ├── dmath/          # deterministic exp, ln, sin, cos, atan2 (basic IEEE ops only) + tests vs Math.*
 │   ├── plan/           # profiles ("demo-v1"), fleet plan, session plan, cluster archetypes (PRE-REGISTERED)
 │   ├── fleet/          # vehicles, calibration, builds
 │   ├── sessions/       # drive sessions: dates, km, tags
 │   ├── events/         # Poisson sampling, planted events, roles, Monday batch, text pairs
 │   ├── telemetry/      # channel models, noise, archetype profiles, CSV writer + quirks
-│   ├── render/         # scene renderer (RGBA), tone curves per variant, conditions, watermark font
+│   ├── render/         # simplified scene renderer (RGBA), tone curves per variant, conditions, watermark font
 │   ├── jpeg/           # jpeg-js encode wrapper + COM-segment splice
 │   ├── text/           # driver-note pool, summary/description templates (ADF)
 │   ├── scenarios/      # scenario-test issues and tags
@@ -125,7 +124,7 @@ export function buildTruth(cfg: SeedConfig): GroundTruth;                       
 - **Seeding:** `splitmix32(seed)` fills the 4 state words. A zero state is impossible by construction.
 - **Uniform:** `u = (next() >>> 8) / 16777216` gives an exact float in [0, 1) with 24 bits.
 - **Normal:** `irwinHallNormal() = Σ₁₂ uᵢ − 6`. Uses additions only, so it is bit-identical across JS engines. Tails are bounded at ±6σ, which is fine for sensor noise and is documented as an approximation.
-- **Poisson(λ):** Knuth multiplication for λ ≤ 30 using `dmath.exp(−λ)`. For λ > 30 (not reached in `demo-v1`), a normal approximation rounded and clamped at 0.
+- **Poisson(λ):** Knuth multiplication for λ ≤ 30 using `Math.exp(−λ)`. For λ > 30 (not reached in `demo-v1`), a normal approximation rounded and clamped at 0.
 - **Choice / shuffle:** Fisher–Yates with `floor(u · n)`.
 
 ### 4.2 Substreams (order independence)
@@ -136,12 +135,13 @@ Every random quantity is drawn from a stream forked by **label**: `rng.fork("eve
 
 Label hierarchy: `fleet:*`, `session:DS-xxxx:*`, `count:<cluster>:<variant>:<build>`, `assign:<cluster>:<k>`, `event:E-xxx:{telemetry|frames|text|quirk}:*`, `scenario:SCN-xx:*`.
 
-### 4.3 Deterministic maths (`dmath`)
+### 4.3 Maths and golden hashes (no `dmath`; decided 2026-11-19)
 
 ECMAScript does not require `Math.exp`, `Math.log`, `Math.sin` or `Math.cos` to be correctly rounded, so results may differ between engines and versions. `+ − × ÷` and `Math.sqrt` are IEEE-754 correctly rounded, and `Math.floor/round/abs/min/max` are exact.
-- **DECISION:** `seedgen` uses `dmath.exp/ln/sin/cos/atan2`, implemented with range reduction plus fixed-degree polynomials using only basic operations. Relative error is ≤ 1e-13 versus `Math.*` (property test). That is irrelevant for realism but makes the output bit-reproducible.
-- An ESLint rule bans `Math.exp|log|sin|cos|tan|atan|atan2|pow` in `seedgen/src` (`pow` with integer exponents goes through `dmath.ipow`).
-- `jpeg-js` encoding is a third-party code path, so its cross-engine byte equality is SPIKE-G1.
+- **DECISION (2026-11-19):** the bit-exact cross-engine math library (`dmath`) is **dropped**. `seedgen` uses the standard `Math.*` functions.
+- **Golden hashes are pinned to Node 22/24 in CI.** The SHA-256 file manifests of the golden fixtures (seeds 1–5) are checked on the CI matrix (Node 22 and Node 24). No other runtime is promised byte-identical output. If the two Node versions ever disagree, CI keeps one manifest per version and the difference is logged in `packages/seedgen/CHANGELOG.md`.
+- The in-app seed runs in a Forge function on `nodejs24.x`, which matches a pinned runtime. Anything compared across other environments (the browser seed fallback, SPIKE-S3) is compared on engine metrics within tolerance (±1 luma), not on bytes.
+- `jpeg-js` encoding is covered by the same Node pin; SPIKE-G1 is N/A.
 
 ### 4.4 Dates
 
@@ -231,7 +231,7 @@ Rates are **per 1,000 km of exposure of the cluster's sensor variant**. This is 
 | **LC-A** | Low sun saturates cam-B, lane confidence collapses, car drifts out, driver takes over | `lane-loss` | cam-B | `low-sun-glare`; highway or rural; sessions with `low-sun` | **0.1 / 0.1 / 8.0** | ≈ 14.3 | Perception | **uncovered** (the deliberate gap) |
 | **LC-B** | Lead vehicle decelerates at night, system brakes late, driver brakes | `late-brake` | cam-A | `night`; urban; sessions with `night` | 1.8 / 1.8 / 1.8 | ≈ 3.8 | Planning | covered |
 | **LC-C** | Late hand-back on a wide rural curve: lane is visible, assist torque fades, car drifts outward | `lateral-drift` | cam-B | `normal` (day); rural | 1.0 / 1.0 / 1.0 | ≈ 4.3 | Controls | covered (via `variant:any`) |
-| **LC-D** | Phantom braking under an overpass shadow, no object ahead | `phantom-brake` | cam-A | `normal` (day), overpass in frame; highway | 1.5 / 1.5 / 1.5 | ≈ 3.1 | Perception | covered |
+| **LC-D** | Phantom braking under an overpass shadow, no object ahead (story only; the frames show no overpass, §9.2) | `phantom-brake` | cam-A | `normal` (day); highway | 1.5 / 1.5 / 1.5 | ≈ 3.1 | Perception | covered |
 
 Sampling: for each `(cluster, build)`, `n ~ Poisson(rate · E_variant,build / 1000)` from stream `count:<cluster>:<variant>:<build>`. Each event is then assigned to an eligible session of that variant and build (one whose tags satisfy the cluster's conditions), with probability proportional to km. `occurredAt = startUtc + U(0.1, 0.9) · duration`. Vehicle and ODD come from the session.
 
@@ -245,7 +245,7 @@ These are **added** to the Poisson process, are always in the Monday batch, and 
 | **P1b** | LC-C | SM-2 (partner of P1a) and SM-3 | LC-C archetype, same exact note **"car drifted left, took over"**, curve and drift to the left. The split shows as a different bucket (lane-loss vs lateral-drift: F6 min lane confidence ≈ 0.15 vs ≈ 0.85) plus the chip difference |
 | **P3a** | LC-B | Second identical-text pair; why-table led by **F3 minTtc / F4 brakeOnsetTtc** (the bot-QA assertion in ARCH §16.3 step 3) | LC-B archetype, note **"it braked hard, I took over"** |
 | **P3b** | LC-D | Partner of P3a | LC-D archetype, same exact note |
-| **N1** | NOVEL-1 | Novelty inside a populated bucket (lane-loss x cam-B), so the result is "Proposed new cluster" rather than "first of its kind" | Construction zone: markings vanish abruptly, short latency, strong swerve, lower speed, cones in frame, overcast. Designed distance to LC-A ≈ 1.6–1.9 τ (§8.5) |
+| **N1** | NOVEL-1 | Novelty inside a populated bucket (lane-loss x cam-B), so the result is "Proposed new cluster" rather than "first of its kind" | Construction zone (signal story): markings vanish abruptly, short latency, strong swerve, lower speed. Frames: plain day scene with an overcast sky palette (no cones, §9.2). Designed distance to LC-A ≈ 1.6–1.9 τ (§8.5) |
 | **AMB1** | LC-A, `boundary` | Honest ambiguity on a rule and a chip threshold | F6 in [0.36, 0.44] (R-LL-1 threshold 0.40) and sunBlob in [0.003, 0.005] (chip threshold 0.004). May land in lateral-drift or lose its chip |
 | **AMB2** | LC-B, `boundary` | Rule-order ambiguity | F3 in [1.85, 2.15] (R-LB-1 at 2.0) and F10 in [0.45, 0.55] (R-CI-1 at 0.5, checked first). May become `cut-in-response` or `unknown` |
 
@@ -363,14 +363,13 @@ A design check with these ranges (expected values, not measured): the mean withi
 ### 9.1 Renderer
 
 - **Output:** RGBA `Uint8ClampedArray`, 1280x720 (`fast`: 960x540).
-- **Pipeline:** integer and `dmath` maths only, then the variant tone curve, then the watermark, then `jpeg-js` encode (quality 85; `fast` 80), then the COM-segment splice (§9.3).
+- **Pipeline:** integer and standard `Math.*` maths (§4.3), then the variant tone curve, then the watermark, then `jpeg-js` encode (quality 85; `fast` 80), then the COM-segment splice (§9.3).
+- **Scope (simplified 2026-11-19):** the renderer draws only what the image metrics (ARCH §5.5) need: sky gradient, road, lane lines, a sun glare blob, night darkening, rain blur/streaks, and the SYNTHETIC watermark. There are no lens flares, headlight or traffic cones, overpass, hills, hood band or road curvature.
 - **Scene layers, back to front:**
-  1. **Sky:** a vertical gradient from a palette per light condition.
-  2. **Far field:** a low hill silhouette from 1D value noise (integer hash).
-  3. **Road:** a perspective trapezoid with its vanishing point at the horizon (cam-A at 0.42 H, 52° HFOV; cam-B at 0.40 H, 60° HFOV). Curvature comes from `yaw_rate / speed` at the frame time (lateral screen offset ∝ depth²). The asphalt has a 2-octave value-noise texture with amplitude ±12 luma, which sets the baseline Laplacian variance.
-  4. **Lane lines:** left solid, right dashed (dash phase advances with `speed · t`). Their screen position shifts with `lane_offset(t)` from the event's own telemetry, so frames and CSV agree. Pre-tone luma is ≤ 215 (§9.4 constraint).
-  5. **Condition layers** (§9.2).
-  6. **Hood band:** cam-A only, bottom 6 % at luma ≈ 60 (≥ 30, so it does not count toward `darkFrac`).
+  1. **Sky:** a vertical gradient from a palette per light condition (clear, warm low-sun, overcast, near-black night).
+  2. **Road:** a straight perspective trapezoid with its vanishing point at the horizon (cam-A at 0.42 H; cam-B at 0.40 H). The asphalt has a 2-octave value-noise texture with amplitude ±12 luma, which sets the baseline Laplacian variance.
+  3. **Lane lines:** left solid, right dashed, at fixed screen positions. Pre-tone luma is ≤ 215 (§9.4 constraint).
+  4. **Condition layers** (§9.2).
 - **Tone curve per variant:** cam-A `y' = y` with a soft knee above 230. cam-B `y' = min(255, 1.12 · y)` with no knee. This is the fictional "narrower dynamic range" that makes low sun saturate on cam-B.
 
 ### 9.2 Conditions
@@ -378,11 +377,10 @@ A design check with these ranges (expected values, not measured): the mean withi
 | Condition | Rendering |
 |---|---|
 | `day` | Clear sky gradient (top 150 → horizon 210 luma equivalent), dry asphalt |
-| `low-sun` | Warm sky. A sun disc near the vanishing point (elevation 0.30–0.38 H, azimuth within ±8° of the road heading) with core radius r_c, a bloom falloff `1 / (1 + (d/r_b)²)` added to RGB, 2–3 lens-flare ghosts along the sun–centre line, and a specular streak on the road below the sun. LC-A on cam-B: r_c sized for sunBlob 0.008–0.020. cam-A low-sun decoy frames: sunBlob 0.001–0.003 (no chip). AMB1: 0.003–0.005 |
-| `night` | Global gain 0.15 with a near-black sky. Two headlight cones (trapezoids, +90 luma peak, feathered). Lane lines are visible only inside the cones. 0–4 small street lamps (≤ 6 px radius) |
-| `rain` | Contrast pulled toward fog grey (lerp 0.45). Three passes of an integer box blur (radius 3, which approximates a Gaussian). Diagonal streaks (alpha 0.15), 20–40 droplet blobs. Combinable with `night` |
-| `overpass` (LC-D) | A dark horizontal concrete band across the top 25–35 % with pillars, and its shadow on the road at 0.55–0.65 H. Same bridge geometry per seed for repeated D events, which gives near-duplicate frames for the dHash stretch (US-24) |
-| `work-zone` (NOVEL-1) | Overcast sky. 4–7 orange cones (triangles with white bands) along the right edge. The left lane line ends abruptly at a random depth |
+| `low-sun` | Warm sky. A **sun glare blob**: a disc near the vanishing point (elevation 0.30–0.38 H) with core radius r_c and a bloom falloff `1 / (1 + (d/r_b)²)` added to RGB. LC-A on cam-B: r_c sized for sunBlob 0.008–0.020. cam-A low-sun decoy frames: sunBlob 0.001–0.003 (no chip). AMB1: 0.003–0.005 |
+| `night` | **Darkening:** global gain 0.15 with a near-black sky |
+| `rain` | **Blur and streaks:** contrast pulled toward fog grey (lerp 0.45), three passes of an integer box blur (radius 3, which approximates a Gaussian), diagonal streaks (alpha 0.15). Combinable with `night` |
+| LC-D and NOVEL-1 | No extra layer (cut 2026-11-19: no overpass, no work-zone cones). LC-D renders as `day`; NOVEL-1 as `day` with the overcast sky palette. Both are told apart by their signals, not their frames |
 
 ### 9.3 SYNTHETIC watermark (every frame)
 
@@ -397,11 +395,11 @@ A design check with these ranges (expected values, not measured): the mean withi
 | day / dry | 100–150 | 180–235 | < 0.01 | < 0.002 | 150–400 | 45–70 | `normal` |
 | low-sun, cam-B (LC-A) | 120–170 | 255 | 0.03–0.09 | 0.008–0.020 | 150–400 | 50–80 | `low-sun-glare` |
 | low-sun, cam-A (decoy) | 110–160 | 235–250 | < 0.02 | 0.001–0.003 | 150–400 | 45–75 | `normal` |
-| night | 15–35 | 90–145 | < 0.005 | < 0.001 | any | any | `night` |
+| night | 15–35 | ≤ 145 | < 0.005 | < 0.001 | any | any | `night` |
 | rain (day) | 90–130 | 150–200 | < 0.005 | < 0.001 | 20–50 | 25–38 | `blur-rain` |
 | night + rain | 12–30 | 80–130 | < 0.003 | < 0.001 | < 50 | < 30 | `night`, `blur-rain` |
 
-**Constraint:** no scene element other than the sun and its specular streak is rendered with pre-tone luma > 215. After the cam-B gain (x1.12) that is ≤ 241 < 250, so lane lines cannot create glare components. SPIKE-G3 covers JPEG q85 blocking artifacts raising `lapVar` in rain frames. The fallback is to render rain frames with lower asphalt texture amplitude, or encode them at q90.
+**Constraint:** no scene element other than the sun glare blob is rendered with pre-tone luma > 215. After the cam-B gain (x1.12) that is ≤ 241 < 250, so lane lines cannot create glare components. SPIKE-G3 covers JPEG q85 blocking artifacts raising `lapVar` in rain frames, and re-checks every band against the simplified renderer (2026-11-19; the night p95 lower bound was dropped because there are no headlight cones or lamps). The fallback is to render rain frames with lower asphalt texture amplitude, or encode them at q90.
 
 **Per-event truth chips** are the chips the event's frames *should* produce: the median rule applied to the per-frame expected metrics. Expected and computed chips are compared in tests (§14.4 E6).
 
@@ -552,7 +550,7 @@ The bot-QA (ARCH §16.3) asserts these against the default seed, using Jira keys
 
 | Id | Property | Runs |
 |---|---|---|
-| G-T1 | **Determinism:** `generate(cfg)` twice gives an identical manifest of SHA-256 hashes over every file | fast-check over seeds, 50 runs (frames `fast`) |
+| G-T1 | **Determinism:** `generate(cfg)` twice gives an identical manifest of SHA-256 hashes over every file; golden manifests for seeds 1–5 match on Node 22 and Node 24 (§4.3) | fast-check over seeds, 50 runs (frames `fast`); CI matrix Node 22/24 |
 | G-T2 | **Substream stability:** changing LC-B's rates leaves every non-LC-B event's CSV and JPEG bytes unchanged | 20 seeds |
 | G-T3 | **Archetype conformance:** the engine's features for non-boundary, non-quirk-Q6 events are within the §8.5 ranges, with the expected rule and every rule margin ≥ 1 | seeds 1–50 |
 | G-T4 | **Render conformance:** per-frame engine metrics fall in the §9.4 bands for ≥ 99 % of frames; the expected chips match for ≥ 99 % of non-boundary frames | seeds 1–20 |
@@ -560,7 +558,7 @@ The bot-QA (ARCH §16.3) asserts these against the default seed, using Jira keys
 | G-T6 | **Honesty lint** (§16) | every generated text and file name |
 | G-T7 | **Quirks:** each Q1–Q9 file parses with the expected mapping and warning, and Q1/Q2/Q3/Q8 give features equal to the clean rendering of the same event within quantisation | seeds 1–20 |
 | G-T8 | **Sizes:** the `tt.event` property is ≤ 12 KB and `tt.thumbs` ≤ 12 KB (ARCH §6.1); CSV ≤ 1 MB; JPEG ≤ 400 KB | seeds 1–20 |
-| G-T9 | **dmath:** relative error ≤ 1e-13 vs `Math.*` over sampled domains, and bit-stable results (golden table) | 10,000 |
+| G-T9 | **N/A (cut 2026-11-19).** Was: `dmath` accuracy and bit stability. The library is dropped; byte stability is G-T1 on the pinned Node versions | – |
 | G-T10 | **Plan constraints** (§6.2) hold for every seed: eligible sessions exist for every cluster x build | 1,000 seeds (plan only, fast) |
 
 ### 14.4 Engine accuracy against truth (`tools/eval`)
@@ -653,9 +651,9 @@ Every seeded artifact carries at least two independent synthetic markers:
 
 | ID | Assumption | Test | When | Fallback |
 |---|---|---|---|---|
-| **SPIKE-G1** | `jpeg-js` encoding produces byte-identical output in Node 24 and Chromium for the same RGBA (relevant only to the browser seed fallback and cross-environment golden hashes) | Encode 20 frames in both; compare SHA-256 | Week 1 | Golden hashes pinned to Node only; cross-environment tests compare engine metrics within ±1 luma instead of bytes |
-| **SPIKE-G2** | Server-side render + encode + decode + metrics for ≈ 80 frames at 1280x720 fits the seed budget inside a 512 MB function (estimated 0.2–0.3 s per frame) | Time S4 in a consumer on the demo site | Week 1, with SPIKE-S2 | `fast` frames; 8 → 4 events per step; 1024 MB for the seed consumer only |
-| **SPIKE-G3** | The §9.4 bands are reachable after q85 JPEG (blocking raises `lapVar` in rain frames; chroma subsampling shifts glare around the sun) | G-T4 on seeds 1–20 | Dec 1 (generator week) | Lower rain texture amplitude, q90 for rain frames, or re-pre-register the bands before the `params-v1` freeze |
+| **SPIKE-G1** | **N/A (cut 2026-11-19).** Was: `jpeg-js` encoding byte-identical in Node 24 and Chromium. Moot: golden hashes are pinned to Node 22/24 in CI (§4.3), and cross-environment checks compare engine metrics within ±1 luma | – | – | (Former fallback is now the design) |
+| **SPIKE-G2** | Server-side render + encode + decode + metrics for ≈ 80 frames at 1280x720 fits the seed budget inside a 512 MB function (estimated 0.2–0.3 s per frame; the simplified renderer should be at the low end) | Time S4 in a consumer on the demo site | Week 1, with SPIKE-S2 | `fast` frames; 8 → 4 events per step; 1024 MB for the seed consumer only |
+| **SPIKE-G3** | The §9.4 bands are reachable with the simplified renderer after q85 JPEG (blocking raises `lapVar` in rain frames; chroma subsampling shifts glare around the sun) | G-T4 on seeds 1–20 | Dec 2 (generator day 2, MILESTONES) | Lower rain texture amplitude, q90 for rain frames, or re-pre-register the bands before the `params-v1` freeze |
 | **SPIKE-G4** | The prototype power estimate (≈ 71 %) holds with the real generator and engine | E7 power mode | Dec 4 | Raise LC-A's 4.12.0 rate or the 4.12.0 session count *before* the freeze, and log it in the CHANGELOG |
 | SPIKE-S1, S2, S3, I2, E1 | As defined in ARCHITECTURE §17 | – | – | – |
 
@@ -672,7 +670,7 @@ Every seeded artifact carries at least two independent synthetic markers:
 | PRD US-14 (onset vs real km) | §6, §7.1, §7.3 |
 | PRD US-15 (routing, TWG) | §12 |
 | PRD US-17 / US-18 (coverage gap, stub) | §11 |
-| PRD US-23 / US-24 (calibration, dHash; stretch) | §5.1, §9.2 overpass |
+| PRD US-23 / US-24 (calibration, dHash; stretch) | §5.1 (dHash has no seeded showcase since the overpass layer was cut, §9.2; it is tested on fixtures) |
 | PRD SM-1 to SM-4 | §13, §14.4, §15.1 |
 | ARCH D4 (pure engine, same code path), D10 (seed consumer) | §2, §3, §15.1 |
 | ARCH §16 (tests, bot-QA) | §13.2, §14 |

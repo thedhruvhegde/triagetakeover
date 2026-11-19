@@ -65,7 +65,7 @@ Narration is about 600 words, at roughly 135 words per minute, which leaves room
 | **3:05–3:15** | Rovo Chat (S22) | Type "What's novel since I last triaged? Why didn't it fit?". The answer names `TTDEMO-{N}`, with d* vs τ and the top contributors. | "What's new since last triage, and why didn't it fit any cluster? The agent cites the issue and the distances." | "Skill: monday-takeover-triage" |
 | **3:15–3:25** | Rovo Chat → issue panel (S23) | Type "Link {A} to the lane-loss cluster." The agent restates the change and asks "Shall I do it?". Type "Yes". It replies "Created link…, Undo is in the panel." A 2 s cut to the panel shows the link and the Undo button. | "Writes happen only when you ask. The agent restates the change, waits for a yes, and tells you exactly what it did." | "Explicit request → confirm → write · undo in panel" |
 | **3:25–3:45** MCP | Admin › Connected apps › Tools exposure (1 s, S24), then an external MCP client (S25, S26) | Show the tools toggle enabled. In the client: connect to `https://mcp.atlassian.com/forge/<appId>`, list 9 tools, call `build-regression-check` with `build = 4.12.0`. Highlight `headline`, `pHolm` and `evidence[0].url` in the JSON. | "The same tools are exposed over MCP. An admin switches them on, and any MCP client, your coding assistant or an inspector, can call them with your Jira permissions. Same engine, same answer, same evidence links." | "rovo:mcp · same 9 actions · p_holm {p_holm} (matches board)" · "Wait trimmed: real {t_mcp} s" |
-| **3:45–4:05** ARCHITECTURE | Animated diagram (S27, built from ARCHITECTURE §1) | Blocks light up in narration order: Browser decode → derived JSON → Forge functions → Jira properties + links (source of truth) + Forge storage index → shared action layer ← Rovo agent / MCP → TWG (as user, fallback) → Forge LLM (optional, dashed). | "Under the hood: files are decoded in the browser, so the server never touches attachments and makes no external calls. One pure TypeScript engine, property-tested with fast-check, runs in the browser, the functions, the seed and the tests. Jira holds the truth. The UI, the agent and MCP share one action layer. The LLM is optional and only names things." | "Forge · Runs on Atlassian (if eligible, see rule 7) · no egress · deterministic core · LLM optional with fallback" |
+| **3:45–4:05** ARCHITECTURE | Animated diagram (S27, built from ARCHITECTURE §1) | Blocks light up in narration order: Browser decode → derived JSON → Forge functions → Jira properties + links (source of truth) + Forge storage index → shared action layer ← Rovo agent / MCP → TWG (as user, fallback). | "Under the hood: files are decoded in the browser, so the server never touches attachments and makes no external calls. One pure TypeScript engine, property-tested with fast-check, runs in the browser, the functions, the seed and the tests. Jira holds the truth. The UI, the agent and MCP share one action layer. There's no LLM in the app: names and stub text come from templates." | "Forge · Runs on Atlassian (if eligible, see rule 7) · no egress · deterministic core · no LLM, template text" |
 | **4:05–4:25** IMPACT + GENERALITY | Board "since last triage" delta (S28), then the column-mapping modal with a synthetic warehouse-robot e-stop CSV (S29) | Board: "Mark triaged" timestamp and the {n_clusters}-cluster summary. Then map the robot CSV columns (`v_mps`, `lidar_min_m`, `loc_score`) to canonical channels and save as a preset. | "For a triage engineer, that's a weekend's tickets turned into a few evidence-backed clusters before the ten o'clock meeting. That's our hypothesis to measure with real teams. And nothing here is car-specific: a ticket, a short signal window, a build, an exposure denominator. Here's a warehouse-robot e-stop log mapped to the same engine. Only the rule pack is automotive." | "Impact = hypothesis, not a measured result" · "Robots · drones · industrial machines (rule packs post-hackathon)" · "Synthetic robot CSV" |
 | **4:25–4:30** CLOSE | End card | – | "Takeover Triage. Triage what the vehicle did." | "Install link + open-source SKILL.md in the description · All demo data synthetic · Not a safety-certified tool · Built for Codegeist 2026" |
 
@@ -92,22 +92,20 @@ Fill each value from `qa-report.json` (ARCHITECTURE §16.3, item 10) and from th
 
 ---
 
-## 5. Shot list: Playwright automation
+## 5. Shot list (recorded by hand)
 
-Build this on the bot-QA harness (`tools/bot-qa`, ARCHITECTURE §16.3): the same login `storageState`, `data-testid` selectors and `frameLocator` for Custom UI iframes. Add a `--video` mode with:
-- `recordVideo` at 1920x1080 and `slowMo` of about 200 ms
-- an injected top-frame cursor highlight (`pointer-events: none` overlay)
-- a fixed light theme and browser zoom
-- hidden Jira chrome noise (dismiss onboarding spotlights and notifications)
+**Decision 2026-11-19:** bot-QA keeps its functional assertions but has **no video-recording mode** (no `--video`, `recordVideo`, `slowMo` or cursor overlay). Every shot below is **recorded by hand** with OS screen capture at 1920x1080, in a clean browser profile with a fixed light theme and zoom, with Jira onboarding spotlights and notifications dismissed first. Each shot is a separate short take, so a single retake is cheap.
 
-Each shot is a separate test, so a single retake is cheap. Every step of a shot with "clip" capture writes a still too, for the Devpost gallery.
+**Optional:** a small Playwright script on the bot-QA harness (`tools/bot-qa`, ARCHITECTURE §16.3: same `storageState`, `data-testid` selectors and `frameLocator`) may capture **screenshots** for the stills and the Devpost gallery, and can pre-check each shot's setup state. It never records video.
 
-| Shot | Used at | Setup state | Scripted steps (testids are provisional) | Capture |
+"Steps" are what the presenter does by hand; the testids are listed so the optional screenshot script and bot-QA can find the same elements. "clip" = hand-recorded screen capture; "still" = screenshot (by hand or the optional Playwright script).
+
+| Shot | Used at | Setup state | Steps (testids are provisional) | Capture |
 |---|---|---|---|---|
 | S01 | 0:00 | seeded, Monday events unassigned | Open the issue list via JQL `project = TTDEMO AND labels = tt-takeover AND ttOccurred >= "<triaged mark>" ORDER BY ttOccurred DESC`, then smooth-scroll. All seeded issues share one `created` time, so the filter uses the indexed event time (`ttOccurred`, ARCHITECTURE §2.2; SPIKE-E1). Fallback: open the board's "new since last triage" list instead | clip 8 s |
 | S02 | 0:07 | – | Open a ticket and hover the attachments strip | clip 6 s |
 | S03 | 0:20 | **fresh** (Remove demo data + Reset app storage, then reinstall on staging) | Admin page: fill the seed, click `tt-seed-start` | clip, real time (sped up in edit) |
-| S04 | 0:20 | – | Wait for `tt-seed-progress[data-state=board-ready]` and record `t_seed` | still + timing |
+| S04 | 0:20 | – | Wait for `tt-seed-progress[data-state=board-ready]`; take `t_seed` from a stopwatch (cross-check with bot-QA's `qa-report.json`) | still + timing |
 | S05 | 0:32 | – | Open {A}, wait for `tt-panel-plot`, hover `tt-chip-low-sun-glare`, hover `tt-result-card` | clip 14 s |
 | S06 | 0:46 | – | Open {B}, highlight `tt-why-bucket-rule` | clip 8 s |
 | S07 | 0:54 | – | On {B}, scroll to `tt-neighbours-plots`, highlight the {C} plot | clip 6 s |
@@ -129,10 +127,10 @@ Each shot is a separate test, so a single retake is cheap. Every step of a shot 
 | S29 | 4:12 | synthetic robot CSV in fixtures | File takeover modal, map columns, save the preset | clip 10 s |
 | Gallery | – | – | Stills of the panel, board, onset card, coverage grid, route card, intake preview and diagnostics, for the Devpost image gallery | stills (2x DPR) |
 
-**Not automated (record by hand with OS screen capture, no audio):**
-- **S21–S23 Rovo Chat.** Playwright can drive it, but responses vary and the latency is unknown (SPIKE-R3). Record 3 to 5 takes by hand and pick the one whose numbers match the board. The bot-QA step 9 soft check runs first, to confirm the agent answers correctly.
-- **S25–S26 MCP client.** Record a terminal session (fixed font, 120x32) or the MCP Inspector web UI. If you use the Inspector, Playwright can drive it locally as an optional script.
-- **S27 architecture animation.** Build an SVG from ARCHITECTURE §1 and animate it in a small HTML page; record that page with Playwright `recordVideo`.
+**Shot-specific notes (all by hand, OS screen capture, no audio):**
+- **S21–S23 Rovo Chat.** Responses vary and the latency is unknown (SPIKE-R3). Record 3 to 5 takes and pick the one whose numbers match the board. The bot-QA step 9 soft check runs first, to confirm the agent answers correctly.
+- **S25–S26 MCP client.** Record a terminal session (fixed font, 120x32) or the MCP Inspector web UI.
+- **S27 architecture animation.** Build an SVG from ARCHITECTURE §1 and animate it in a small HTML page; screen-record that page by hand.
 - **Title and end cards.** Use the editor.
 
 ---
@@ -143,14 +141,13 @@ Each shot is a separate test, so a single retake is cheap. Every step of a shot 
 |---|---|---|---|
 | **Specialized Industries** (category) | 0:00–1:58 | An ADAS takeover queue, signal plots, the build-exposure statistic, scenario coverage (SOTIF vocabulary used carefully) | Problem, personas ([PRD §1–2](PRD.md)) |
 | **Best Rovo Agents** (primary) | 2:50–3:25 | The agent name "Fleet Triage" in Rovo Chat; a starter clicked; the answer citing issue keys and p-values; the explicit-confirmation write; the skill name `monday-takeover-triage` (caption, or the agent's config page in Studio if SPIKE-R4 passes) | Agent prompt rules, action list, skill (ARCHITECTURE §10) |
-| **Best MCP** (also qualifies) | 3:25–3:45 | The admin tools-exposure toggle; the tool list from `mcp.atlassian.com/forge/<appId>`; one `build-regression-check` call returning the same `pHolm` as the board | ARCHITECTURE §10.4 |
+| **Best MCP** (also declared) | 3:25–3:45 | The admin tools-exposure toggle; the tool list from `mcp.atlassian.com/forge/<appId>`; one `build-regression-check` call returning the same `pHolm` as the board | ARCHITECTURE §10.4 |
 | **Teamwork Graph** (secondary) | 2:18–2:34 | "Source: Teamwork Graph, as you" on the route card; team members; the diagnostics fallback row. Never claim TWG data flows out through MCP: actions return the team name only (D8) | ARCHITECTURE §11 |
 | Technological Implementation (criterion 1, first tie-breaker) | 0:20, 2:34–2:50, 3:45 | One-click seed on a fresh site, the judge's own CSV, the not-enough-data state, the deterministic core and fast-check. Counters "single hardcoded demo path" ([rules.md §7](research/rules.md)) | Testing strategy, SM-4 results on unseen seeds |
 | Design (criterion 2) | 0:32–2:50 | One coherent flow across panel, board, coverage grid, route card and intake, in ADS styling; undo on every write; honest empty states | Screenshots gallery; PRD §4 principles |
 | Potential Impact (criterion 3) | 0:00–0:20, 4:05–4:25 | A named audience (validation triage engineer, build owner, safety engineer) and a concrete Monday-morning pain; impact stated as a hypothesis | PRD §1–2, §11 hypotheses |
 | Innovation / Idea (criterion 4) | 0:46–1:00, 1:40–1:52 | Clustering by signal, not text (same text → different clusters, different text → same cluster), and an exposure-normalised onset test, which text-based rivals cannot show | PRD §1 insight; RISKS R-13 |
 | Presentation (criterion 5) | whole video | Problem in the first 20 s, end-to-end working app, no slideware except the architecture animation; under 5:00 | – |
-| Marketplace | – | **Not planned** (decision due Nov 21). If it is approved, add a 3 s listing/ticket still at 4:25 | – |
 
 ---
 
