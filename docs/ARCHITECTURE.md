@@ -1313,3 +1313,9 @@ Every unverified platform assumption, grouped by test date. PRD SPIKEs are repea
 9. **RISKS:** R-16 rewritten for capacity after the cuts (L stays 3; the cuts fund the generator days); R-06 closed; R-05/R-10/R-20 and the watch calendar no longer mention the LLM; two accepted residual risks added (Node-pinned seed bytes; index freshness without triggers).
 
 IDs kept: no story, feature (F1–F10), SPIKE or action key was renumbered. MILESTONES cut items 2 and 3 are marked N/A rather than deleted, so "cut #5" and "items 1–6" references still hold.
+
+### 2026-11-19 — engine build findings
+- **Coverage, rural seeds:** SEED_DATA §11 says a rural-majority LC-A is "still uncovered", but by §5.10 SCN-05 matches on type + `odd:rural` → `partial`. The engine follows §5.10; non-default seeds accept either verdict. Default seed (2029) is unaffected.
+- **Onset power ≈66%** over seeds 0–999 (prototype estimate ≈71%). Cause: final-weekend LC-A events are not yet accepted while that weekend's km counts toward 4.12.0 exposure. The engine matches the truth-membership calculation exactly; the gap is in the generator's exposure accounting. Gated only on the default seed (E7).
+- **Night vs blur-rain chip rule:** at low gain, night frames also fall below the blur thresholds. Seedgen adds sensor noise to night frames; revisit making `blur-rain` conditional on not-`night` if real night frames misfire.
+- **Default seed is 2029:** the smallest seed ≥ 2026 that meets all §13.1 criteria (tested).
