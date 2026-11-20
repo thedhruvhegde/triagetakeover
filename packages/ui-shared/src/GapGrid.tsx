@@ -4,7 +4,7 @@
  * prefix, not only by colour.
  */
 import type { TakeoverType } from "@tt/engine";
-import { colors, font, space, tableStyle, tdStyle, thStyle, visuallyHidden } from "./theme.js";
+import { colors, font, space, state, tableStyle, tdStyle, thStyle, visuallyHidden } from "./theme.js";
 import type { GapGridLike } from "./types.js";
 
 export interface GapGridProps {
@@ -64,8 +64,8 @@ export function GapGrid({ grid, caption = "Coverage gaps: events vs scenario tes
                   ...tdStyle,
                   textAlign: "center" as const,
                   minWidth: 72,
-                  background: gap ? colors.danger : events > 0 ? colors.success : "transparent",
-                  color: gap ? colors.dangerText : colors.text,
+                  background: gap ? state.gap : events > 0 ? state.coveredTint : "transparent",
+                  color: gap ? state.onState : colors.text,
                   fontWeight: gap ? 600 : 400,
                   outline: isSelected ? `2px solid ${colors.focus}` : undefined,
                   cursor: onSelect !== undefined && events > 0 ? "pointer" : undefined,

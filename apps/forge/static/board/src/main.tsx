@@ -2,6 +2,7 @@
  * Board entry: wires the real `@forge/bridge` into {@link BoardApp}.
  */
 import "@atlaskit/css-reset";
+import "@tt/ui-shared/style";
 import { NavigationProvider } from "@tt/ui-shared";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

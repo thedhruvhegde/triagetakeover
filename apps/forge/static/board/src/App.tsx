@@ -18,6 +18,8 @@ import {
   Loading,
   OnsetBadge,
   Section,
+  StateChip,
+  state,
   StatusToast,
   SyntheticBadge,
   Warnings,
@@ -95,7 +97,7 @@ function Board({ deps, projectKey }: { readonly deps: BoardDeps; readonly projec
     <AppFrame label="Takeover clusters">
       <header style={{ display: "flex", flexWrap: "wrap", gap: space.m, alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: space.xs }}>
-          <h1 style={{ font: "var(--ds-font-heading-medium, normal 653 20px/24px sans-serif)", margin: 0, color: colors.text }}>Takeover clusters · {projectKey}</h1>
+          <h1 style={{ font: "normal 700 28px/32px var(--tt-font, sans-serif)", letterSpacing: "-0.02em", margin: 0, color: colors.text }}>Takeover clusters · {projectKey}</h1>
           {v.state === "ready" && <SyntheticBadge show={v.data.synthetic} />}
         </div>
         <Row>
@@ -210,7 +212,7 @@ function BoardBody({ board, client, onChanged }: { readonly board: BoardView; re
       <ProposedGroups groups={board.proposedGroups} />
       <Section title="Scenario coverage gaps" testId="tt-coverage">
         <p style={{ font: font.small, color: colors.subtle, margin: `0 0 ${space.s}` }}>
-          {plural(board.scenarioCount, "scenario test")} found with <code>{board.scenarioJql}</code>. Red cells have events but no test.
+          {plural(board.scenarioCount, "scenario test")} found with <code>{board.scenarioJql}</code>. Peach cells (marked !) have events but no test.
         </p>
         <GapGrid grid={board.gapGrid} />
       </Section>
@@ -232,7 +234,7 @@ function ClusterRowView({ row, expanded, onToggle, client, onChanged }: { readon
   const detailsId = `tt-cluster-details-${row.cluster.key}`;
   return (
     <tbody data-testid={`tt-cluster-row-${row.cluster.key}`}>
-      <tr>
+      <tr style={expanded ? { background: state.featuredTint, boxShadow: `inset 4px 0 0 ${state.featured}` } : undefined}>
         <th scope="row" style={{ ...tdStyle, textAlign: "left", fontWeight: 400 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <button
@@ -253,7 +255,7 @@ function ClusterRowView({ row, expanded, onToggle, client, onChanged }: { readon
         </th>
         <td style={numericCell}>
           {row.acceptedCount}
-          {row.newSinceTriage > 0 && <span style={{ color: colors.successText }}> (+{row.newSinceTriage})</span>}
+          {row.newSinceTriage > 0 && <span style={{ fontWeight: 600 }}> (+{row.newSinceTriage})</span>}
           {row.pendingSuggestions.length > 0 && <div style={{ font: font.small, color: colors.subtle }}>{row.pendingSuggestions.length} suggested</div>}
         </td>
         <td style={tdStyle}>{row.type}</td>
@@ -265,14 +267,22 @@ function ClusterRowView({ row, expanded, onToggle, client, onChanged }: { readon
           <OnsetBadge onset={row.onset} />
         </td>
         <td style={tdStyle} data-testid={`tt-coverage-${row.cluster.key}`} data-verdict={row.coverage.verdict ?? row.coverage.state}>
-          <span style={{ color: row.coverage.verdict === "uncovered" ? colors.dangerText : colors.text }}>{coverageText(row.coverage)}</span>
+          {row.coverage.verdict === "uncovered" ? (
+            <StateChip tone="gap">{coverageText(row.coverage)}</StateChip>
+          ) : row.coverage.verdict === "covered" ? (
+            <StateChip tone="covered">{coverageText(row.coverage)}</StateChip>
+          ) : row.coverage.verdict === "partial" ? (
+            <StateChip tone="inconclusive">{coverageText(row.coverage)}</StateChip>
+          ) : (
+            <span>{coverageText(row.coverage)}</span>
+          )}
         </td>
         <td style={tdStyle}>{row.owner === null ? <Muted>no rule</Muted> : row.owner.team}</td>
         <td style={tdStyle}>{row.status}</td>
       </tr>
       {expanded && (
         <tr id={detailsId}>
-          <td colSpan={9} style={{ ...tdStyle, background: colors.sunken }}>
+          <td colSpan={9} style={{ ...tdStyle, background: state.surface, padding: space.m }}>
             <ClusterDetails row={row} client={client} onChanged={onChanged} />
           </td>
         </tr>
@@ -291,6 +301,7 @@ function NovelQueue({ items }: { readonly items: readonly NovelQueueItem[] }) {
           {items.map((n) => (
             <li key={n.event.key} data-testid={`tt-novel-${n.event.key}`} style={{ padding: `${space.xs} 0`, borderBottom: `1px solid ${colors.border}` }}>
               <Row>
+                <StateChip tone="novel">Novel</StateChip>
                 <IssueLink issueKey={n.event.key} />
                 <span>
                   {n.event.type} · {n.event.variant} · build {n.event.build}

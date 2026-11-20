@@ -80,3 +80,34 @@ export const thStyle: CSSProperties = {
 };
 export const tdStyle: CSSProperties = { padding: `${space.xs} ${space.s}`, borderBottom: `1px solid ${colors.border}`, verticalAlign: "top" };
 export const numericCell: CSSProperties = { ...tdStyle, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+
+/**
+ * State colours (docs/design/preview.html). One meaning each; bright fills always carry
+ * `onState` (near-black) text and a word, never colour alone. Fallbacks are the light palette.
+ */
+export const state = {
+  regress: "var(--tt-regress, #ff4d8b)",
+  regressTint: "var(--tt-regress-tint, #ffd9e6)",
+  regressText: "var(--tt-regress-text, #9c1048)",
+  inconclusive: "var(--tt-inconclusive, #e8b94a)",
+  inconclusiveTint: "var(--tt-inconclusive-tint, #f9ecc8)",
+  featured: "var(--tt-featured, #1a3a3a)",
+  featuredTint: "var(--tt-featured-tint, #dce9e5)",
+  onFeatured: "var(--tt-on-featured, #ffffff)",
+  novel: "var(--tt-novel, #b8a4ed)",
+  novelTint: "var(--tt-novel-tint, #ebe4fb)",
+  gap: "var(--tt-gap, #ffb084)",
+  gapTint: "var(--tt-gap-tint, #ffe6d6)",
+  covered: "var(--tt-covered, #a4d4c5)",
+  coveredTint: "var(--tt-covered-tint, #e0f1eb)",
+  onState: "var(--tt-on-state, #0a0a0a)",
+  ink: "var(--tt-ink, #0a0a0a)",
+  surface: "var(--tt-surface, #f5f0e0)",
+  surfaceStrong: "var(--tt-surface-strong, #ebe6d6)",
+  hairline: "var(--tt-hairline, #e5e0d0)",
+} as const;
+
+export const radius = { s: 8, m: 12, l: 16, xl: 24 } as const;
+
+/** Mono stack for numbers, keys, builds and p-values. */
+export const mono = 'var(--tt-mono, "JetBrains Mono", ui-monospace, Menlo, monospace)';

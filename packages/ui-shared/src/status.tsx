@@ -5,7 +5,7 @@ import Button from "@atlaskit/button/new";
 import Spinner from "@atlaskit/spinner";
 import type { ReactNode } from "react";
 import type { ClientError } from "./client.js";
-import { colors, font, space } from "./theme.js";
+import { colors, font, radius, space, state } from "./theme.js";
 
 export function Loading({ label }: { readonly label: string }) {
   return (
@@ -19,11 +19,11 @@ export function Loading({ label }: { readonly label: string }) {
 export type NoticeAppearance = "information" | "warning" | "error" | "success" | "discovery";
 
 const NOTICE_TONE: Readonly<Record<NoticeAppearance, { readonly bg: string; readonly fg: string; readonly icon: string; readonly name: string }>> = {
-  information: { bg: colors.information, fg: colors.text, icon: "i", name: "Information" },
-  warning: { bg: colors.warning, fg: colors.warningText, icon: "!", name: "Warning" },
-  error: { bg: colors.danger, fg: colors.dangerText, icon: "×", name: "Error" },
-  success: { bg: colors.success, fg: colors.successText, icon: "✓", name: "Success" },
-  discovery: { bg: colors.neutral, fg: colors.text, icon: "★", name: "Note" },
+  information: { bg: state.surface, fg: colors.text, icon: "i", name: "Information" },
+  warning: { bg: state.inconclusiveTint, fg: colors.text, icon: "!", name: "Warning" },
+  error: { bg: state.regressTint, fg: colors.text, icon: "×", name: "Error" },
+  success: { bg: state.coveredTint, fg: colors.text, icon: "✓", name: "Success" },
+  discovery: { bg: state.novelTint, fg: colors.text, icon: "★", name: "Note" },
 };
 
 /**
@@ -38,7 +38,7 @@ export function Notice({ appearance = "information", title, children, testId }: 
       data-testid={testId}
       data-appearance={appearance}
       aria-label={title ?? tone.name}
-      style={{ display: "flex", gap: space.s, background: tone.bg, borderRadius: 4, padding: `${space.s} ${space.m}`, margin: `${space.s} 0`, font: font.body, color: colors.text }}
+      style={{ display: "flex", gap: space.s, background: tone.bg, borderRadius: radius.m, padding: `${space.s} ${space.m}`, margin: `${space.s} 0`, font: font.body, color: colors.text }}
     >
       <span aria-hidden="true" style={{ fontWeight: 700, color: tone.fg, minWidth: 16, textAlign: "center" }}>
         {tone.icon}
@@ -106,7 +106,7 @@ export function StatusToast({ message, tone = "success", children }: { readonly 
   return (
     <div role="status" aria-live="polite" data-testid="tt-toast" style={{ minHeight: 0 }}>
       {message !== null && (
-        <div style={{ background: bg, color: fg, padding: `${space.s} ${space.m}`, borderRadius: 4, font: font.body, margin: `${space.s} 0`, display: "flex", gap: space.m, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ background: bg, color: fg, padding: `${space.s} ${space.m}`, borderRadius: radius.m, font: font.body, margin: `${space.s} 0`, display: "flex", gap: space.m, alignItems: "center", flexWrap: "wrap" }}>
           <span>{message}</span>
           {children}
         </div>

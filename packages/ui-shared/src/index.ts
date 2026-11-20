@@ -7,6 +7,7 @@ export * from "./format.js";
 export * from "./client.js";
 export * from "./navigation.js";
 export * from "./theme.js";
+export { StateChip, type ChipTone } from "./Chip.js";
 export * from "./plot-math.js";
 export { SignalPlot, OverlayPlot, StripPlot, type SignalPlotProps, type OverlayPlotProps, type StripPlotProps, type PlotLayer } from "./SignalPlot.js";
 export { WhyTable, type WhyTableProps, type ConditionTerm } from "./WhyTable.js";

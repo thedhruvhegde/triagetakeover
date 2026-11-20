@@ -110,7 +110,7 @@ export function Muted({ children }: { readonly children: ReactNode }) {
 /** Visually grouped card. */
 export function Card({ children, testId, tone = "default" }: { readonly children: ReactNode; readonly testId?: string; readonly tone?: "default" | "sunken" }) {
   return (
-    <div data-testid={testId} style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: space.m, background: tone === "sunken" ? colors.sunken : colors.surfaceRaised, margin: `${space.s} 0` }}>
+    <div data-testid={testId} style={{ border: `1px solid ${colors.border}`, borderRadius: 16, padding: space.m, background: tone === "sunken" ? colors.sunken : colors.surfaceRaised, margin: `${space.s} 0` }}>
       {children}
     </div>
   );

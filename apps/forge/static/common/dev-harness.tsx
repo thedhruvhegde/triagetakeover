@@ -4,6 +4,7 @@
  * (Vite builds `index.html` only).
  */
 import "@atlaskit/css-reset";
+import "@tt/ui-shared/style";
 import { NavigationProvider, Notice, type Navigator } from "@tt/ui-shared";
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";

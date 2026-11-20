@@ -26,12 +26,17 @@ import {
   formatNumber,
   sharedDomain,
   space,
+  StateChip,
+  type ChipTone,
   type Domain,
 } from "@tt/ui-shared";
 import { useState } from "react";
 import type { ClusterRef, ExplainView, MatchView, PanelEventView, TriageActionResult, TtClient } from "../../common/api.js";
 import { Card, Muted, Row, TextField } from "../../common/ui.js";
 import { RouteFlow } from "./Route.js";
+
+const RESULT_TONE: Readonly<Record<MatchView["result"], ChipTone>> = { match: "featured", ambiguous: "inconclusive", novel: "novel", "first-of-kind": "novel", accepted: "featured" };
+const RESULT_CHIP: Readonly<Record<MatchView["result"], string>> = { match: "Match", ambiguous: "Ambiguous", novel: "Novel", "first-of-kind": "First of kind", accepted: "Accepted" };
 
 const RESULT_TITLE: Readonly<Record<MatchView["result"], string>> = {
   match: "Matches a cluster",
@@ -120,7 +125,10 @@ export function EventPanel({ view, client, issueKey, onChanged }: { readonly vie
 
       <Card testId="tt-result-card">
         <div data-result={m.result} style={{ display: "flex", flexDirection: "column", gap: space.xs }}>
-          <h2 style={{ font: "var(--ds-font-heading-small, normal 653 16px/20px sans-serif)", margin: 0 }}>{RESULT_TITLE[m.result]}</h2>
+          <Row>
+            <StateChip tone={RESULT_TONE[m.result]}>{RESULT_CHIP[m.result]}</StateChip>
+            <h2 style={{ font: "var(--ds-font-heading-small, normal 653 16px/20px sans-serif)", margin: 0 }}>{RESULT_TITLE[m.result]}</h2>
+          </Row>
           <p style={{ margin: 0 }}>
             {m.message}
             {m.cluster !== undefined && (

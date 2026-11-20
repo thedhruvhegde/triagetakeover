@@ -1,0 +1,237 @@
+/*
+ * Takeover Triage visual language (docs/design/preview.html).
+ *
+ * - Warm cream canvas, near-black ink and primary actions, hairline borders, no shadows.
+ * - Saturated colour is reserved for STATE, one meaning each:
+ *     regress (pink) · inconclusive (ochre) · featured (deep teal) · novel (lavender)
+ *     gap (peach) · covered (mint)
+ *   Bright fills carry near-black text (white on pink fails WCAG AA); only teal carries white.
+ *   Every coloured surface also carries its word, so colour is never the only signal.
+ * - Atlaskit components stay underneath: we re-point the `--ds-*` design tokens they read, so
+ *   buttons, spinners and focus rings pick the palette up without forking them.
+ *
+ * Light applies by default and for html[data-color-mode="light"]; dark applies when the host
+ * theme (view.theme.enable()) sets data-color-mode="dark". `!important` is needed because the
+ * host theme injects its own `--ds-*` values on <html> after this sheet loads.
+ */
+
+:root,
+html[data-color-mode="light"] {
+  --tt-canvas: #fffaf0;
+  --tt-surface: #f5f0e0;
+  --tt-surface-soft: #faf5e8;
+  --tt-surface-strong: #ebe6d6;
+  --tt-ink: #0a0a0a;
+  --tt-body: #3a3a3a;
+  --tt-muted: #6a6a6a;
+  --tt-hairline: #e5e0d0;
+  --tt-primary: #0a0a0a;
+  --tt-primary-hover: #2a2a2a;
+  --tt-on-primary: #fffaf0;
+
+  --tt-regress: #ff4d8b;
+  --tt-regress-tint: #ffd9e6;
+  --tt-regress-text: #9c1048;
+  --tt-inconclusive: #e8b94a;
+  --tt-inconclusive-tint: #f9ecc8;
+  --tt-inconclusive-text: #6e4f00;
+  --tt-featured: #1a3a3a;
+  --tt-featured-tint: #dce9e5;
+  --tt-on-featured: #ffffff;
+  --tt-novel: #b8a4ed;
+  --tt-novel-tint: #ebe4fb;
+  --tt-gap: #ffb084;
+  --tt-gap-tint: #ffe6d6;
+  --tt-covered: #a4d4c5;
+  --tt-covered-tint: #e0f1eb;
+  --tt-covered-text: #1d5c48;
+  --tt-on-state: #0a0a0a;
+
+  --tt-series-1: #1a5c57;
+  --tt-series-2: #6f55c9;
+  --tt-series-3: #a86f00;
+  --tt-series-4: #c2185b;
+  --tt-marker: #d6246a;
+  color-scheme: light;
+}
+
+html[data-color-mode="dark"] {
+  --tt-canvas: #16140f;
+  --tt-surface: #211e17;
+  --tt-surface-soft: #1c1a14;
+  --tt-surface-strong: #2c281f;
+  --tt-ink: #f6f1e4;
+  --tt-body: #d6d0c2;
+  --tt-muted: #a39d8f;
+  --tt-hairline: #3a352b;
+  --tt-primary: #f6f1e4;
+  --tt-primary-hover: #ddd7c8;
+  --tt-on-primary: #16140f;
+
+  --tt-regress: #ff6f9f;
+  --tt-regress-tint: #4a1f2e;
+  --tt-regress-text: #ffa3c2;
+  --tt-inconclusive: #e2b54c;
+  --tt-inconclusive-tint: #3d321a;
+  --tt-inconclusive-text: #f0cf80;
+  --tt-featured: #2f6560;
+  --tt-featured-tint: #1f3532;
+  --tt-on-featured: #ffffff;
+  --tt-novel: #a993e4;
+  --tt-novel-tint: #2e2742;
+  --tt-gap: #f5a676;
+  --tt-gap-tint: #44301f;
+  --tt-covered: #8fc6b5;
+  --tt-covered-tint: #1d3530;
+  --tt-covered-text: #a9dccb;
+  --tt-on-state: #0a0a0a;
+
+  --tt-series-1: #7fc9bf;
+  --tt-series-2: #b8a4ed;
+  --tt-series-3: #e2b54c;
+  --tt-series-4: #ff8fb4;
+  --tt-marker: #ff6f9f;
+  color-scheme: dark;
+}
+
+/* Re-point the Atlaskit tokens (both modes: they resolve through the --tt-* values above). */
+:root,
+html[data-color-mode] {
+  --tt-font: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, sans-serif;
+  --tt-mono: "JetBrains Mono", ui-monospace, Menlo, "Ubuntu Mono", monospace;
+
+  --ds-text: var(--tt-ink) !important;
+  --ds-text-subtle: var(--tt-body) !important;
+  --ds-text-subtlest: var(--tt-muted) !important;
+  --ds-text-inverse: var(--tt-on-primary) !important;
+  --ds-text-brand: var(--tt-ink) !important;
+  --ds-text-selected: var(--tt-ink) !important;
+  --ds-text-danger: var(--tt-regress-text) !important;
+  --ds-text-warning: var(--tt-inconclusive-text) !important;
+  --ds-text-success: var(--tt-covered-text) !important;
+  --ds-link: var(--tt-ink) !important;
+  --ds-link-pressed: var(--tt-body) !important;
+
+  --ds-surface: var(--tt-canvas) !important;
+  --ds-surface-raised: var(--tt-surface-soft) !important;
+  --ds-surface-overlay: var(--tt-canvas) !important;
+  --ds-surface-sunken: var(--tt-surface) !important;
+  --ds-elevation-surface: var(--tt-canvas) !important;
+  --ds-shadow-raised: none !important;
+  --ds-shadow-overlay: 0 0 0 1px var(--tt-hairline) !important;
+
+  --ds-border: var(--tt-hairline) !important;
+  --ds-border-input: var(--tt-muted) !important;
+  --ds-border-focused: var(--tt-featured) !important;
+  --ds-border-brand: var(--tt-ink) !important;
+  --ds-border-danger: var(--tt-marker) !important;
+
+  --ds-background-neutral: var(--tt-surface) !important;
+  --ds-background-neutral-hovered: var(--tt-surface-strong) !important;
+  --ds-background-neutral-pressed: var(--tt-hairline) !important;
+  --ds-background-neutral-subtle: transparent !important;
+  --ds-background-neutral-subtle-hovered: var(--tt-surface) !important;
+  --ds-background-neutral-subtle-pressed: var(--tt-surface-strong) !important;
+  --ds-background-input: var(--tt-canvas) !important;
+  --ds-background-input-hovered: var(--tt-surface-soft) !important;
+  --ds-background-brand-bold: var(--tt-primary) !important;
+  --ds-background-brand-bold-hovered: var(--tt-primary-hover) !important;
+  --ds-background-brand-bold-pressed: var(--tt-primary) !important;
+  --ds-background-selected: var(--tt-featured-tint) !important;
+  --ds-background-danger: var(--tt-regress-tint) !important;
+  --ds-background-warning: var(--tt-inconclusive-tint) !important;
+  --ds-background-success: var(--tt-covered-tint) !important;
+  --ds-background-information: var(--tt-surface) !important;
+  --ds-background-discovery: var(--tt-novel-tint) !important;
+
+  --ds-chart-categorical-1: var(--tt-series-1) !important;
+  --ds-chart-categorical-2: var(--tt-series-2) !important;
+  --ds-chart-categorical-3: var(--tt-series-3) !important;
+  --ds-chart-categorical-4: var(--tt-series-4) !important;
+  --ds-chart-neutral: var(--tt-muted) !important;
+  --ds-chart-danger: var(--tt-regress) !important;
+
+  --ds-radius-xsmall: 4px !important;
+  --ds-radius-small: 8px !important;
+  --ds-radius-medium: 12px !important;
+  --ds-border-radius: 12px !important;
+
+  --ds-font-family-body: var(--tt-font) !important;
+  --ds-font-family-heading: var(--tt-font) !important;
+  --ds-font-family-code: var(--tt-mono) !important;
+  --ds-font-body: normal 400 14px/20px var(--tt-font) !important;
+  --ds-font-body-small: normal 400 12px/16px var(--tt-font) !important;
+  --ds-font-body-large: normal 400 16px/24px var(--tt-font) !important;
+  --ds-font-code: normal 400 0.875em/1 var(--tt-mono) !important;
+  --ds-font-heading-xsmall: normal 600 14px/18px var(--tt-font) !important;
+  --ds-font-heading-small: normal 600 16px/20px var(--tt-font) !important;
+  --ds-font-heading-medium: normal 600 20px/24px var(--tt-font) !important;
+  --ds-font-heading-large: normal 600 24px/28px var(--tt-font) !important;
+  --ds-font-heading-xlarge: normal 600 29px/32px var(--tt-font) !important;
+}
+
+html,
+body {
+  background: var(--tt-canvas);
+  color: var(--tt-ink);
+  font-family: var(--tt-font);
+  font-feature-settings: "cv11", "ss01";
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--tt-ink);
+  font-family: var(--tt-font);
+  letter-spacing: -0.01em;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--tt-mono);
+}
+
+/* Links: ink + underline (not blue). Colour never carries "this is a link" on its own. */
+a {
+  color: var(--tt-ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--tt-featured);
+  outline-offset: 2px;
+}
+
+/* Native form controls inherit the type and palette. */
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--tt-ink);
+  background: var(--tt-canvas);
+  border: 1px solid var(--tt-muted);
+  border-radius: 8px;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

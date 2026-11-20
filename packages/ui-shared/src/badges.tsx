@@ -2,7 +2,7 @@
  * Small presentational pieces: EvidenceLink, ConfidenceBadge, ConditionChips, SyntheticBadge,
  * Disclaimer.
  */
-import Lozenge from "@atlaskit/lozenge";
+import { StateChip } from "./Chip.js";
 import type { ConditionChip } from "@tt/engine";
 import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { formatPercent } from "./format.js";
@@ -138,7 +138,7 @@ export function ConditionChips({ chips, showRules = false, emptyText = "n/a", ca
         const rules = c.rules.join("; ");
         return (
           <span key={c.chip} data-testid={`tt-chip-${c.chip}`} style={{ display: "inline-flex", gap: space.xs, alignItems: "center" }}>
-            <Lozenge appearance={c.chip === "normal" ? "default" : "moved"}>{CHIP_LABEL[c.chip]}</Lozenge>
+            <StateChip tone={c.chip === "normal" ? "outline" : "neutral"}>{CHIP_LABEL[c.chip]}</StateChip>
             {showRules && rules !== "" && <span style={{ font: font.small, color: colors.subtle }}>{rules}</span>}
             {!showRules && rules !== "" && <span style={visuallyHidden}>({rules})</span>}
           </span>
@@ -158,9 +158,7 @@ export function SyntheticBadge({ show = true }: { readonly show?: boolean }) {
   if (!show) return null;
   return (
     <span data-testid="tt-synthetic-badge" role="note">
-      <Lozenge appearance="new" isBold>
-        {SYNTHETIC_BADGE_TEXT}
-      </Lozenge>
+      <StateChip tone="synthetic">{SYNTHETIC_BADGE_TEXT}</StateChip>
     </span>
   );
 }

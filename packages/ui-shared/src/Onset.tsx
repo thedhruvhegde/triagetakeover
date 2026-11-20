@@ -3,16 +3,16 @@
  * words, per-build bars of events per 1,000 km with the onset build marked, and the
  * "How is this computed?" expander with the formula and every input.
  */
-import Lozenge from "@atlaskit/lozenge";
+import { StateChip, type ChipTone } from "./Chip.js";
 import { formatKm, formatNumber, formatP, formatRatio, onsetVerdictLabel, pValueInWords } from "./format.js";
 import { colors, font, space, visuallyHidden } from "./theme.js";
 import type { OnsetLike, OnsetVerdict } from "./types.js";
 
-const APPEARANCE: Readonly<Record<OnsetVerdict, "removed" | "default" | "success" | "inprogress">> = {
-  "regression-likely": "removed",
-  inconclusive: "inprogress",
-  "no-evidence": "success",
-  "not-enough-data": "default",
+const TONE: Readonly<Record<OnsetVerdict, ChipTone>> = {
+  "regression-likely": "regress",
+  inconclusive: "inconclusive",
+  "no-evidence": "neutral",
+  "not-enough-data": "outline",
 };
 
 /** The p-value used for the verdict sentence: Holm-adjusted when present, else the scan p. */
@@ -33,9 +33,7 @@ export function OnsetBadge({ onset, showWords = false }: OnsetBadgeProps) {
   return (
     <span data-testid="tt-onset-verdict" data-verdict={onset.verdict} style={{ display: "inline-flex", flexDirection: "column", gap: space.xs }}>
       <span style={{ display: "inline-flex", gap: space.xs, alignItems: "center", flexWrap: "wrap" }}>
-        <Lozenge appearance={APPEARANCE[onset.verdict]} isBold={onset.verdict === "regression-likely"}>
-          {onsetVerdictLabel(onset.verdict)}
-        </Lozenge>
+        <StateChip tone={TONE[onset.verdict]}>{onsetVerdictLabel(onset.verdict)}</StateChip>
         {onset.verdict !== "not-enough-data" && (
           <span style={{ font: font.small, color: colors.subtle }}>
             {build.trim() !== "" && <>{build.trim()} · </>}p_raw {formatP(onset.pRaw)} · p_holm {formatP(onset.pHolm)}
@@ -67,11 +65,11 @@ export function OnsetBars({ onset, width = 420 }: OnsetBarsProps) {
   const barH = 18;
   const gap = 8;
   const left = 80;
-  const right = 150;
+  const right = 200;
   const height = rows.length * (barH + gap);
   return (
     <figure style={{ margin: 0 }}>
-      <svg data-testid="tt-onset-bars" role="img" aria-label={`Events per 1,000 km by build. ${rows.map((r) => `${r.build}: ${r.events} events in ${formatKm(r.km)}${r.rate === null ? ", no exposure" : `, ${formatNumber(r.rate, 2)} per 1,000 km`}`).join("; ")}.`} viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: width, display: "block", font: font.small }}>
+      <svg data-testid="tt-onset-bars" overflow="visible" role="img" aria-label={`Events per 1,000 km by build. ${rows.map((r) => `${r.build}: ${r.events} events in ${formatKm(r.km)}${r.rate === null ? ", no exposure" : `, ${formatNumber(r.rate, 2)} per 1,000 km`}`).join("; ")}.`} viewBox={`0 0 ${width} ${height}`} width="100%" style={{ maxWidth: width, display: "block", font: font.small }}>
         {rows.map((r, i) => {
           const y = i * (barH + gap);
           const after = onsetIdx >= 0 && i >= onsetIdx;

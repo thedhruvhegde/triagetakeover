@@ -3,6 +3,7 @@
  * encoder into {@link IntakeApp}.
  */
 import "@atlaskit/css-reset";
+import "@tt/ui-shared/style";
 import { NavigationProvider } from "@tt/ui-shared";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
