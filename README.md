@@ -21,7 +21,9 @@ not a safety-certified tool. All demo data is procedurally generated and labelle
 | Path | What |
 |---|---|
 | `packages/engine` | Pure, deterministic TypeScript core (stats, signal features, clustering, coverage). No Forge, DOM, clock or RNG. |
-| `apps/forge` | The Forge app (coming next). |
+| `packages/seedgen` | Procedural generator for the SYNTHETIC demo fleet (telemetry CSV, dashcam-like JPEGs, drive sessions). |
+| `packages/ui-shared` | React components shared by the Custom UI apps (signal plots, why-table, gap grid, onset). |
+| `apps/forge` | The Forge app: manifest, services, resolvers, consumers, Rovo actions/MCP, Forge adapters, UI Kit and Custom UI (`static/*`). Built and tested offline, not yet deployed. See [apps/forge/README.md](apps/forge/README.md) and [docs/SPIKES.md](docs/SPIKES.md). |
 | `docs/` | [PRD](docs/PRD.md), [architecture](docs/ARCHITECTURE.md), [demo script](docs/DEMO_SCRIPT.md), [seed data](docs/SEED_DATA.md), [milestones](docs/MILESTONES.md), [risks](docs/RISKS.md), research. |
 
 ## Development
@@ -30,7 +32,8 @@ Requires Node 22.12+ (or 24) and pnpm 10.
 
 ```bash
 pnpm install
-pnpm check   # typecheck + lint + tests (Vitest + fast-check)
+pnpm check          # typecheck + lint + tests (Vitest + fast-check) + offline manifest validation
+pnpm check:deploy   # build what forge deploy needs, strict manifest, bundle budgets, offline Forge bundler check
 ```
 
 ## License

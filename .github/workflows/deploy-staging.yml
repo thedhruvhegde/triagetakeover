@@ -1,0 +1,78 @@
+name: deploy-staging
+# ARCHITECTURE §16.4. Skipped (not failed) until the repository has the FORGE_API_TOKEN and
+# FORGE_EMAIL secrets and the app is registered (manifest app.id is not the placeholder).
+# Nothing in this workflow has run yet.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        env:
+          HAS_TOKEN: ${{ secrets.FORGE_API_TOKEN != '' && secrets.FORGE_EMAIL != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "FORGE_API_TOKEN / FORGE_EMAIL secrets are not set: skipping the staging deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif grep -q "app/00000000-0000-0000-0000-000000000000" apps/forge/manifest.yml; then
+            echo "manifest.yml still has the placeholder app id (run forge register first): skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+      FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+      # Optional repository variable, e.g. my-demo.atlassian.net. Without it, only deploy runs.
+      DEMO_SITE: ${{ vars.DEMO_SITE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: build + strict manifest + budgets
+        run: pnpm build && pnpm validate:manifest:strict && pnpm check:size
+      - name: Forge CLI
+        run: |
+          npm install -g @forge/cli@15.1.0
+          forge settings set usage-analytics false
+          forge whoami
+          pnpm check:bundle --require
+      - name: forge lint
+        working-directory: apps/forge
+        run: forge lint -e staging
+      - name: forge deploy
+        working-directory: apps/forge
+        run: forge deploy -e staging --non-interactive
+      - name: forge install --upgrade (when DEMO_SITE is set)
+        if: env.DEMO_SITE != ''
+        working-directory: apps/forge
+        run: forge install --upgrade --site "$DEMO_SITE" --product jira -e staging --non-interactive
+      - name: forge eligibility (Runs on Atlassian)
+        working-directory: apps/forge
+        run: forge eligibility -e staging | tee eligibility.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eligibility-staging
+          path: apps/forge/eligibility.txt

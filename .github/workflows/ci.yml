@@ -1,18 +1,42 @@
 name: ci
+# ARCHITECTURE §16.4. Offline only: no Forge login, no deploy (see deploy-staging.yml).
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24] # golden hashes are pinned to both (SEED_DATA §4.3)
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      # Build first so the tests also check the Custom UI dists the manifest points at.
+      - name: build (engine/seedgen dist + Vite x3)
+        run: pnpm build
+      - name: test
+        run: pnpm test
+        env:
+          TT_REQUIRE_UI_BUILD: "1"
+      - name: manifest (offline @forge/manifest validation, strict)
+        run: pnpm validate:manifest:strict
+      - name: bundle budgets (§13)
+        run: pnpm check:size
+      - name: Forge bundler check (SPIKE-M2, offline, Forge's own webpack config)
+        run: |
+          npm install -g @forge/cli@15.1.0
+          forge settings set usage-analytics false || true
+          pnpm check:bundle --require
+      - name: audit (production dependencies)
+        run: pnpm audit --audit-level=high --prod

@@ -1319,3 +1319,14 @@ IDs kept: no story, feature (F1–F10), SPIKE or action key was renumbered. MILE
 - **Onset power ≈66%** over seeds 0–999 (prototype estimate ≈71%). Cause: final-weekend LC-A events are not yet accepted while that weekend's km counts toward 4.12.0 exposure. The engine matches the truth-membership calculation exactly; the gap is in the generator's exposure accounting. Gated only on the default seed (E7).
 - **Night vs blur-rain chip rule:** at low gain, night frames also fall below the blur thresholds. Seedgen adds sensor noise to night frames; revisit making `blur-rain` conditional on not-`night` if real night frames misfire.
 - **Default seed is 2029:** the smallest seed ≥ 2026 that meets all §13.1 criteria (tested).
+
+### 2026-11-20 — Forge app integration findings (offline; no deploy yet)
+- **SPIKE-M2, found offline:** the Forge CLI's own bundler (`@forge/bundler` 7.3.2, webpack) does not map a `./x.js` import to `x.ts`. Code under `apps/forge/src` therefore uses extensionless relative imports, and ESLint enforces this. `pnpm check:bundle` runs the CLI's function and UI Kit webpack configs offline. The default path for `@tt/engine` and `@tt/seedgen` is the pnpm workspace symlink to their prebuilt `dist/`, built by `pnpm build:engine` (part of `pnpm build`). Status per SPIKE: [SPIKES.md](SPIKES.md).
+- **Engine fix (coverage):** when the same test key appeared twice, for example from overlapping JQL pages, the best partial match depended on input order. `best()` now breaks ties by matched dimensions. A regression test was added.
+- **Permission check:** a transient `mypermissions` failure, or a missing asUser consent, is now reported as unavailable or an error, not as "no access".
+- **Contract additions:**
+  - `startSeed` accepts `mode` (start, keep or reset) and `frames`.
+  - New `getSeedReport` method; the admin page shows the report, and offers Keep or Reset on a seed conflict.
+  - `SeedJobView` carries the optional progress fields.
+  - `ScenarioStubView.reused` replaces warning-text matching.
+- **Routing:** a TWG team whose display name is only its ARI now shows the admin's rule label instead.
