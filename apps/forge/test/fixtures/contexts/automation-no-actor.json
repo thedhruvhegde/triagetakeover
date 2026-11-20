@@ -1,0 +1,12 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): an automation invocation that carries no user identity at all. The app must refuse rather than act as nobody. Not recorded.",
+  "caller": "automation-no-actor",
+  "inputStyle": "strings",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "jira": { "issueKey": "{{issueKey}}", "projectKey": "{{projectKey}}" }
+  },
+  "invocationContext": {
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

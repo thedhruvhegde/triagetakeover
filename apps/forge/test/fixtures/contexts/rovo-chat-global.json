@@ -1,0 +1,13 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): Rovo chat outside any issue or project (e.g. the Rovo app). Not recorded.",
+  "caller": "rovo-chat-global",
+  "inputStyle": "native",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "moduleKey": "fleet-triage"
+  },
+  "invocationContext": {
+    "principal": { "accountId": "acc-engineer" },
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): an external MCP client via mcp.atlassian.com/forge/<appId>, with no issue in focus. Inputs are JSON-typed; extra unknown inputs are possible. Not recorded.",
+  "caller": "mcp",
+  "inputStyle": "native",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001"
+  },
+  "invocationContext": {
+    "principal": { "accountId": "acc-engineer" },
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

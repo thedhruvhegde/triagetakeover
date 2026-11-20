@@ -1,0 +1,14 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): Rovo chat opened on a Jira project page (no issue in focus). Not recorded.",
+  "caller": "rovo-chat-project",
+  "inputStyle": "native",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "moduleKey": "fleet-triage",
+    "jira": { "resourceType": "project", "projectKey": "{{projectKey}}", "projectId": "10000" }
+  },
+  "invocationContext": {
+    "principal": { "accountId": "acc-engineer" },
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

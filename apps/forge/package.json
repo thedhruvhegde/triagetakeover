@@ -1,0 +1,29 @@
+{
+  "name": "@tt/forge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Takeover Triage Forge app (Jira). Functions, resolvers, Rovo actions and UI Kit frontends.",
+  "scripts": {
+    "build": "tsc -b",
+    "validate:manifest": "node scripts/validate-manifest.mjs",
+    "bundle-check": "node scripts/forge-bundle-check.cjs"
+  },
+  "dependencies": {
+    "@forge/api": "8.4.0",
+    "@forge/bridge": "7.2.1",
+    "@forge/events": "3.0.9",
+    "@forge/kvs": "2.1.1",
+    "@forge/react": "12.4.0",
+    "@forge/resolver": "2.0.2",
+    "@tt/engine": "workspace:*",
+    "@tt/seedgen": "workspace:*",
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@forge/manifest": "13.8.0",
+    "@types/react": "18.3.31",
+    "yaml": "2.9.1"
+  }
+}

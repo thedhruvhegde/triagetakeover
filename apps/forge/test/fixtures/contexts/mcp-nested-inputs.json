@@ -1,0 +1,10 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): an MCP bridge that nests the tool arguments under payload.inputs and puts the accountId in payload.context. Not recorded.",
+  "caller": "mcp-nested-inputs",
+  "inputStyle": "nested",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "accountId": "acc-engineer"
+  },
+  "invocationContext": {}
+}

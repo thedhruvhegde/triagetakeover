@@ -1,0 +1,448 @@
+# Takeover Triage - Forge manifest (Jira only).
+# Source of truth: docs/ARCHITECTURE.md §2 (modules), §3 (scopes), §7.3 (custom entities), §10.3 (actions).
+# OWNERSHIP: later work packages must NOT edit this file; they report the change they need.
+# SPIKE-M1: property-level syntax is checked offline against the @forge/manifest JSON schema
+# (`pnpm validate:manifest`) but has not been through `forge lint` / `forge deploy` yet.
+
+app:
+  # PLACEHOLDER app id. `forge register` replaces it with the real ari:cloud:ecosystem::app/<uuid>.
+  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  runtime:
+    name: nodejs24.x
+  # NO `licensing` block: a licensed app cannot be shared by link (ARCHITECTURE §2.2, VERIFIED).
+  storage:
+    # ARCHITECTURE §7.3. Entity names must be lower-case ([a-z0-9:-_.]), so the spec's
+    # `driveSession` is declared as `drive-session` (recorded deviation).
+    # SPIKE-E2: composite partitions, page size, cursors, float/any attributes.
+    entities:
+      - name: event                       # key = event issueId
+        attributes:
+          issueKey: { type: string }
+          projectKey: { type: string }
+          bucket: { type: string }        # "lane-loss|cam-B"
+          type: { type: string }
+          variant: { type: string }
+          build: { type: string }
+          occurredAt: { type: integer }   # epoch s
+          status: { type: string }        # accepted|proposed|novel|unassigned
+          clusterId: { type: string }     # cluster issueId or ""
+          proposalId: { type: string }
+          nnDist: { type: float }
+          chipsMask: { type: integer }
+          features: { type: any }
+          engine: { type: string }
+          synthetic: { type: boolean }
+          indexedAt: { type: integer }
+        indexes:
+          - { name: by-bucket, partition: [projectKey, bucket], range: [occurredAt] }
+          - { name: by-cluster, partition: [clusterId], range: [occurredAt] }
+          - { name: by-status, partition: [projectKey, status], range: [occurredAt] }
+      - name: cluster                     # key = cluster issueId
+        attributes:
+          issueKey: { type: string }
+          projectKey: { type: string }
+          bucket: { type: string }
+          nameDet: { type: string }
+          memberCount: { type: integer }
+          firstBuild: { type: string }
+          ownerRule: { type: string }
+          status: { type: string }
+          profile: { type: any }
+          onset: { type: any }
+          coverage: { type: any }
+          updatedAt: { type: integer }
+          synthetic: { type: boolean }
+        indexes:
+          - { name: by-project, partition: [projectKey], range: [updatedAt] }
+          - { name: by-project-bucket, partition: [projectKey, bucket], range: [memberCount] }
+      - name: vehicle                     # key = vehicleId
+        attributes:
+          vehicleId: { type: string }
+          label: { type: string }
+          variant: { type: string }
+          sensors: { type: any }
+          calibration: { type: any }
+          synthetic: { type: boolean }
+        indexes:
+          - { name: by-variant, partition: [variant], range: [vehicleId] }
+      - name: drive-session               # key = sessionId (spec name: driveSession)
+        attributes:
+          sessionId: { type: string }
+          vehicleId: { type: string }
+          variant: { type: string }
+          build: { type: string }
+          date: { type: integer }
+          km: { type: float }
+          odd: { type: any }
+          source: { type: string }
+          synthetic: { type: boolean }
+        indexes:
+          - { name: by-variant, partition: [variant], range: [date] }
+          - { name: by-vehicle, partition: [vehicleId], range: [date] }
+
+modules:
+  jira:adminPage:
+    - key: tt-admin
+      title: Takeover Triage setup
+      resource: admin
+      render: native                      # UI Kit (D11)
+      resolver:
+        function: ui-resolver
+
+  jira:projectPage:
+    - key: tt-board
+      title: Takeover clusters
+      resource: board                     # Custom UI
+      resolver:
+        function: ui-resolver
+
+  jira:issuePanel:
+    - key: tt-panel
+      title: Takeover signature
+      icon: resource:icons;panel.svg
+      resource: panel                     # Custom UI; lazy re-processing on open (§7.5)
+      resolver:
+        function: ui-resolver
+
+  jira:issueAction:
+    - key: tt-triage-now
+      title: Triage now (Takeover Triage)
+      resource: triage
+      render: native                      # UI Kit
+      resolver:
+        function: ui-resolver
+    - key: tt-add-telemetry
+      title: Add telemetry (Takeover Triage)
+      resource: intake                    # Custom UI, mode `attach`. SPIKE-C2: modal width
+      viewportSize: xlarge
+      resolver:
+        function: ui-resolver
+
+  jira:entityProperty:
+    # SPIKE-E1: exact indexing behaviour and lag. Fallback selector: `labels = tt-takeover`.
+    - key: tt-event-index
+      entityType: issue
+      propertyKey: tt.event
+      values:
+        - { path: v, type: number, searchAlias: ttV }
+        - { path: sig.type, type: string, searchAlias: ttType }
+        - { path: ctx.variant, type: string, searchAlias: ttVariant }
+        - { path: ctx.build, type: string, searchAlias: ttBuild }
+        - { path: ctx.occurredAt, type: date, searchAlias: ttOccurred }
+    # SEED_DATA §15.1 idempotency: "JQL on the `tt.seed.itemId` property if SPIKE-E1 passes"
+    # (addition to the ARCHITECTURE §2.2 list; fallback is the `seed:state` id list).
+    - key: tt-seed-index
+      entityType: issue
+      propertyKey: tt.seed
+      values:
+        - { path: itemId, type: string, searchAlias: ttSeedItem }
+        - { path: seed, type: number, searchAlias: ttSeed }
+
+  # No `trigger`, `scheduledTrigger`, `webtrigger` or `llm` modules (D9, D12; cut 2026-11-19).
+
+  consumer:
+    # SPIKE-M1: `function:` form (the schema also accepts `resolver: {function, method}`).
+    - key: tt-recluster-consumer
+      queue: tt-recluster                 # also runs "Re-sync now" (reason: resync)
+      function: recluster
+    - key: tt-seed-consumer
+      queue: tt-seed
+      function: seed-step
+
+  action:
+    - key: get-cluster-for-event
+      name: Get cluster for event
+      function: act-get-cluster
+      actionVerb: GET
+      description: >-
+        Finds the takeover cluster an ADAS takeover/disengagement event belongs to, using the
+        Takeover Triage engine (rule bucket, nearest accepted events, distance threshold).
+        Returns match, novel, first-of-kind or ambiguous, with confidence and the why-table.
+      inputs:
+        issueKey:
+          title: Event issue key
+          type: string
+          required: false
+          description: Jira key of the takeover event issue, e.g. TTDEMO-12. Defaults to the issue in context.
+    - key: explain-match
+      name: Explain match
+      function: act-explain
+      actionVerb: GET
+      description: >-
+        Explains why a takeover event does or does not match a cluster: bucket rule, signal and
+        condition distances against the threshold, and every feature's contribution.
+      inputs:
+        issueKey:
+          title: Event issue key
+          type: string
+          required: false
+          description: Jira key of the takeover event issue. Defaults to the issue in context.
+        clusterKey:
+          title: Cluster issue key
+          type: string
+          required: false
+          description: Jira key of the cluster issue to compare against. Defaults to the accepted or best-matching cluster.
+    - key: build-regression-check
+      name: Build regression check
+      function: act-regression
+      actionVerb: GET
+      description: >-
+        Screens takeover clusters for a rate increase per 1,000 km across software builds
+        (exact binomial onset scan, Holm-corrected). Returns raw and adjusted p-values and
+        caveats. A screening signal, not a causal attribution.
+      inputs:
+        clusterKey:
+          title: Cluster issue key
+          type: string
+          required: false
+          description: Jira key of one cluster issue to check. One of clusterKey or build is required.
+        build:
+          title: Software build
+          type: string
+          required: false
+          description: Software build to check all clusters against, e.g. 4.12.0. One of clusterKey or build is required.
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the project in context.
+    - key: list-novel-since
+      name: List novel events
+      function: act-novel
+      actionVerb: GET
+      description: >-
+        Lists takeover events that match no existing cluster (novel), since the team's last
+        "Mark triaged" time or a given ISO-8601 time, with the nearest cluster distance.
+      inputs:
+        since:
+          title: Since (ISO-8601)
+          type: string
+          required: false
+          description: ISO-8601 date-time, e.g. 2026-11-14T17:00:00Z. Defaults to the last "Mark triaged" time, else 7 days ago.
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the project in context.
+        limit:
+          title: Limit
+          type: integer
+          required: false
+          description: Maximum number of events to return (default 10, maximum 25).
+    - key: list-coverage-gaps
+      name: List coverage gaps
+      function: act-coverage
+      actionVerb: GET
+      description: >-
+        Lists takeover clusters with no or partial scenario-test coverage, comparing each
+        cluster's condition signature (type, sensor variant, conditions, ODD) with the tags of
+        scenario-test issues.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the project in context.
+        minEvents:
+          title: Minimum events
+          type: integer
+          required: false
+          description: Only clusters with at least this many events (default 2).
+        includePartial:
+          title: Include partial coverage
+          type: boolean
+          required: false
+          description: Also list partially covered clusters (default true).
+        limit:
+          title: Limit
+          type: integer
+          required: false
+          description: Maximum number of gaps to return (maximum 25).
+    - key: suggest-owner
+      name: Suggest owning team
+      function: act-owner
+      actionVerb: GET
+      description: >-
+        Suggests the owning team for a takeover cluster from the admin's routing rules, resolved
+        through Teamwork Graph, the component lead or a project role. Returns the team name,
+        source and rule; never member lists.
+      inputs:
+        clusterKey:
+          title: Cluster issue key
+          type: string
+          required: true
+          description: Jira key of the cluster issue.
+    - key: link-event
+      name: Link event to cluster
+      function: act-link
+      actionVerb: CREATE
+      description: >-
+        Links a takeover event issue to a cluster issue (accepts the membership). Only call when
+        the user explicitly asked for this change and confirmed it; set userConfirmed to true
+        only after the user agreed. Undo is in the Takeover signature issue panel.
+      inputs:
+        issueKey:
+          title: Event issue key
+          type: string
+          required: true
+          description: Jira key of the takeover event issue to link.
+        clusterKey:
+          title: Cluster issue key
+          type: string
+          required: true
+          description: Jira key of the cluster issue to link the event to.
+        userConfirmed:
+          title: User confirmed
+          type: boolean
+          required: true
+          description: True only after the user explicitly confirmed this exact change in the conversation.
+    - key: create-cluster
+      name: Split into new cluster
+      function: act-split
+      actionVerb: CREATE
+      description: >-
+        Creates a new cluster issue seeded with one takeover event (split). Only call when the
+        user explicitly asked for this change and confirmed it.
+      inputs:
+        issueKey:
+          title: Seed event issue key
+          type: string
+          required: true
+          description: Jira key of the takeover event that seeds the new cluster.
+        name:
+          title: Cluster name
+          type: string
+          required: false
+          description: Optional cluster name (up to 80 characters). Defaults to the deterministic template name.
+        userConfirmed:
+          title: User confirmed
+          type: boolean
+          required: true
+          description: True only after the user explicitly confirmed this exact change in the conversation.
+    - key: create-scenario-stub
+      name: Create scenario stub
+      function: act-stub
+      actionVerb: CREATE
+      description: >-
+        Creates a scenario-test stub issue for an uncovered takeover cluster, with tag labels for
+        every signature dimension and links to the cluster and 3 representative events. Only call
+        when the user explicitly asked for this change and confirmed it.
+      inputs:
+        clusterKey:
+          title: Cluster issue key
+          type: string
+          required: true
+          description: Jira key of the cluster issue that needs scenario coverage.
+        userConfirmed:
+          title: User confirmed
+          type: boolean
+          required: true
+          description: True only after the user explicitly confirmed this exact change in the conversation.
+
+  rovo:agent:
+    - key: fleet-triage
+      name: Fleet Triage
+      icon: resource:icons;agent.svg
+      prompt: resource:agent;prompt.txt
+      conversationStarters:
+        - Which clusters started on 4.12.0?
+        - Why didn't this takeover match its nearest cluster?
+        - What's novel since I last triaged?
+        - Which clusters have no scenario coverage?
+      actions:
+        - get-cluster-for-event
+        - explain-match
+        - build-regression-check
+        - list-novel-since
+        - list-coverage-gaps
+        - suggest-owner
+        - link-event
+        - create-cluster
+        - create-scenario-stub
+      skills:
+        - monday-takeover-triage            # Preview; SPIKE-R4 (playbook also inlined in the prompt)
+
+  rovo:skill:
+    - key: monday-takeover-triage
+      source:
+        dir: skills/monday-takeover-triage
+      dependencies:
+        tools:
+          - list-novel-since
+          - build-regression-check
+          - list-coverage-gaps
+          - get-cluster-for-event
+          - explain-match
+          - suggest-owner
+
+  rovo:mcp:
+    - key: takeover-triage-mcp
+      name: Takeover Triage
+      tools:
+        - get-cluster-for-event
+        - explain-match
+        - build-regression-check
+        - list-novel-since
+        - list-coverage-gaps
+        - suggest-owner
+        - link-event
+        - create-cluster
+        - create-scenario-stub
+
+  function:
+    - key: ui-resolver
+      handler: index.uiResolver
+    - key: recluster
+      handler: index.recluster
+      timeoutSeconds: 900                 # 900 s for the resync rebuild (§8)
+    - key: seed-step
+      handler: index.seedStep
+      timeoutSeconds: 600
+    - key: act-get-cluster
+      handler: actions.getClusterForEvent
+    - key: act-explain
+      handler: actions.explainMatch
+    - key: act-regression
+      handler: actions.buildRegressionCheck
+    - key: act-novel
+      handler: actions.listNovelSince
+    - key: act-coverage
+      handler: actions.listCoverageGaps
+    - key: act-owner
+      handler: actions.suggestOwner
+    - key: act-link
+      handler: actions.linkEvent
+    - key: act-split
+      handler: actions.createCluster
+    - key: act-stub
+      handler: actions.createScenarioStub
+
+resources:
+  - key: board
+    path: static/board/dist
+  - key: panel
+    path: static/panel/dist
+  - key: intake
+    path: static/intake/dist
+  - key: admin
+    path: src/frontend/admin.tsx
+  - key: triage
+    path: src/frontend/triage.tsx
+  - key: agent
+    path: resources/agent
+  - key: icons
+    path: resources/icons
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - manage:jira-project               # seed only (project + components); conditional on SPIKE-S1
+    - storage:app
+    - read:graph:team:atlassian          # TWG routing (asUser only); org admin grants it
+    - read:graph:user:atlassian
+  content:
+    styles:
+      - unsafe-inline                    # SPIKE-C1: Atlaskit/emotion inline styles in Custom UI
+  # NO `external` block: no fetch.backend, no fetch.client (§14, Runs on Atlassian).

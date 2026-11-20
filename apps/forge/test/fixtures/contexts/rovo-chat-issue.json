@@ -1,0 +1,23 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): Rovo chat opened on a Jira issue. Not recorded.",
+  "caller": "rovo-chat-issue",
+  "inputStyle": "native",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "moduleKey": "fleet-triage",
+    "jira": {
+      "url": "https://example-site.atlassian.net/browse/{{issueKey}}",
+      "resourceType": "issue",
+      "issueKey": "{{issueKey}}",
+      "issueId": "0",
+      "issueType": "Task",
+      "issueTypeId": "10001",
+      "projectKey": "{{projectKey}}",
+      "projectId": "10000"
+    }
+  },
+  "invocationContext": {
+    "principal": { "accountId": "acc-engineer" },
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

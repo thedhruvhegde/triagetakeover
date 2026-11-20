@@ -1,0 +1,13 @@
+{
+  "_note": "ASSUMED (SPIKE-A2): a Jira Automation rule invoking the agent on an issue; inputs may arrive as strings; accountId at the top level of the function context. Not recorded.",
+  "caller": "automation",
+  "inputStyle": "strings",
+  "payloadContext": {
+    "cloudId": "00000000-0000-4000-8000-000000000001",
+    "jira": { "issueKey": "{{issueKey}}", "projectKey": "{{projectKey}}" }
+  },
+  "invocationContext": {
+    "accountId": "acc-engineer",
+    "installContext": "ari:cloud:jira::site/00000000-0000-4000-8000-000000000001"
+  }
+}

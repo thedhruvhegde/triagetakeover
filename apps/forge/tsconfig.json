@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The Forge CLI bundles src/ (like a bundler), so resolve and interop the way a bundler
+    // does. With NodeNext, CJS default exports such as `@forge/resolver` would not type-check.
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "rootDir": "src",
+    "outDir": "dist",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../../packages/engine" }, { "path": "../../packages/seedgen" }]
+}
