@@ -259,6 +259,15 @@ describe("coverage properties (§16.2)", () => {
     );
   });
 
+  it("verdict does not depend on test order, even with a duplicated key (regression: fast-check seed 762935145)", () => {
+    const sig: ConditionSignature = { type: "cut-in-response", variant: "cam-A", chips: [], odd: [] };
+    const dup = [
+      { key: "T-4", tags: { type: ["phantom-brake"], variant: ["cam-A"], odd: ["highway"] } },
+      { key: "T-4", tags: { variant: ["cam-A"], cond: ["any"] } },
+    ];
+    expect(coverageVerdict(sig, [...dup].reverse())).toEqual(coverageVerdict(sig, dup));
+  });
+
   it("verdict does not depend on test order", () => {
     fc.assert(
       fc.property(sigArb, testsArb, (sig, tests) => {

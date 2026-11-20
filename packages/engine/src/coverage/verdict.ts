@@ -62,11 +62,24 @@ interface Scored {
   readonly matched: readonly CoverageDimension[];
 }
 
-/** Best of `xs`: most matched dimensions, then lowest key. */
+/** Total order for ties: lowest key, then the matched dimensions in canonical order. */
+function compareScored(a: Scored, b: Scored): number {
+  const byKey = compareIssueKeysNatural(a.key, b.key);
+  if (byKey !== 0) return byKey;
+  const sa = COVERAGE_DIMENSIONS.filter((d) => a.matched.includes(d)).join(",");
+  const sb = COVERAGE_DIMENSIONS.filter((d) => b.matched.includes(d)).join(",");
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
+/**
+ * Best of `xs`: most matched dimensions, then lowest key. The same key can appear twice (e.g.
+ * overlapping JQL pages), so equal keys are ordered by their matched dimensions: the result
+ * never depends on input order.
+ */
 function best(xs: readonly Scored[]): Scored | undefined {
   let top: Scored | undefined;
   for (const x of xs) {
-    if (top === undefined || x.matched.length > top.matched.length || (x.matched.length === top.matched.length && compareIssueKeysNatural(x.key, top.key) < 0)) {
+    if (top === undefined || x.matched.length > top.matched.length || (x.matched.length === top.matched.length && compareScored(x, top) < 0)) {
       top = x;
     }
   }
