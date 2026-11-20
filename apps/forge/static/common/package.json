@@ -1,0 +1,20 @@
+{
+  "name": "@tt/static-common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Source shared by the Custom UI apps (imported by relative path, bundled into each app). Only forge.ts touches @forge/bridge.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@atlaskit/button": "25.7.0",
+    "@forge/bridge": "7.2.1",
+    "@tt/ui-shared": "workspace:*",
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31"
+  }
+}
