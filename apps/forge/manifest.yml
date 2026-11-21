@@ -5,8 +5,8 @@
 # (`pnpm validate:manifest`) but has not been through `forge lint` / `forge deploy` yet.
 
 app:
-  # PLACEHOLDER app id. `forge register` replaces it with the real ari:cloud:ecosystem::app/<uuid>.
-  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  # Registered with `forge register` in the "Takeover Triage" Developer Space.
+  id: ari:cloud:ecosystem::app/5e3997af-4655-4111-95ed-08b32bd85f65
   runtime:
     name: nodejs24.x
   # NO `licensing` block: a licensed app cannot be shared by link (ARCHITECTURE §2.2, VERIFIED).
